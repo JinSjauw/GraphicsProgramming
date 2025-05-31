@@ -16,8 +16,11 @@
     <Filter Include="Resource Files\Textures">
       <UniqueIdentifier>{b80430fb-756e-49b8-958d-d067b571e194}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Resource Files\Textures\Shaders">
+    <Filter Include="Resource Files\Shaders">
       <UniqueIdentifier>{83c8b8aa-604c-48cb-a45e-812fa8f904e6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files\Models">
+      <UniqueIdentifier>{cee08f4c-72b0-4fee-81a1-0483c8f1a7f0}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -30,23 +33,26 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\Fragment.shader">
-      <Filter>Resource Files\Textures\Shaders</Filter>
+      <Filter>Resource Files\Shaders</Filter>
     </None>
     <None Include="shaders\Vertex.shader">
-      <Filter>Resource Files\Textures\Shaders</Filter>
+      <Filter>Resource Files\Shaders</Filter>
     </None>
     <None Include="shaders\skyboxFragment.shader">
-      <Filter>Resource Files\Textures\Shaders</Filter>
+      <Filter>Resource Files\Shaders</Filter>
     </None>
     <None Include="shaders\skyboxVertex.shader">
-      <Filter>Resource Files\Textures\Shaders</Filter>
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\terrainVertex.shader">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\terrainFragment.shader">
+      <Filter>Resource Files\Shaders</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
     <Image Include="textures\container2.png">
-      <Filter>Resource Files\Textures</Filter>
-    </Image>
-    <Image Include="textures\dirt.jpg">
       <Filter>Resource Files\Textures</Filter>
     </Image>
     <Image Include="textures\container2normal.png">
@@ -55,9 +61,24 @@
     <Image Include="textures\GradientTexture.png">
       <Filter>Resource Files\Textures</Filter>
     </Image>
+    <Image Include="textures\heightmap.png">
+      <Filter>Resource Files\Textures</Filter>
+    </Image>
+    <Image Include="textures\heightnormal.png">
+      <Filter>Resource Files\Textures</Filter>
+    </Image>
+    <Image Include="textures\dirt.jpg">
+      <Filter>Resource Files\Textures</Filter>
+    </Image>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stb_image.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="model.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="mesh.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

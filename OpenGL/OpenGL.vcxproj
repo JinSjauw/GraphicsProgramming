@@ -175,15 +175,21 @@
     <None Include="shaders\Fragment.shader" />
     <None Include="shaders\skyboxFragment.shader" />
     <None Include="shaders\skyboxVertex.shader" />
+    <None Include="shaders\terrainFragment.shader" />
+    <None Include="shaders\terrainVertex.shader" />
     <None Include="shaders\Vertex.shader" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="textures\container2.png" />
-    <Image Include="textures\dirt.jpg" />
     <Image Include="textures\container2normal.png" />
+    <Image Include="textures\dirt.jpg" />
     <Image Include="textures\GradientTexture.png" />
+    <Image Include="textures\heightmap.png" />
+    <Image Include="textures\heightnormal.png" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="mesh.h" />
+    <ClInclude Include="model.h" />
     <ClInclude Include="stb_image.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

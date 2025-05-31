@@ -5,6 +5,9 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include "model.h"
+
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -15,34 +18,49 @@ int Init(GLFWwindow*& window);
 void CreateGeometry(GLuint &VAO, GLuint &EBO, int &size, int &numIndices);
 void CreateShaders();
 void CreateProgram(GLuint& programID, const char* vertex, const char* fragment);
-void RenderBox(glm::mat4& world, glm::mat4& view, glm::mat4& projection, GLuint& boxTex, GLuint& boxNormal, GLuint& gradientTex, GLuint& triangleVAO, int triangleIndexCount);
+unsigned int GeneratePlane(const char* heightmap, unsigned char* &data, GLenum format, int comp, float hScale, float xzScale, unsigned int& indexCount, unsigned int& heightmapID);
+void RenderBox(glm::mat4& view, glm::mat4& projection, GLuint& boxTex, GLuint& boxNormal, GLuint& gradientTex, GLuint& triangleVAO, int triangleIndexCount);
 void RenderSkyBox();
+void RenderTerrain();
 
-//Calbacks
+//Callbacks
 void Mouse_Callback(GLFWwindow* window, double xpos, double ypos);
+void Key_Callback(GLFWwindow* window, int key, int scancode, int action, int mods);
+
+bool keys[2048];
 
 //Utils
 void LoadFile(const char* filename, char*& output);
-GLuint loadTexture(const char* path);
+GLuint loadTexture(const char* path, int comp = 0);
 
 //Program ID's
-GLuint simpleProgram, skyBoxProgram;
+GLuint simpleProgram, skyBoxProgram, terrainProgram;
 
 const int WIDTH = 1280, HEIGHT = 720;
-
-//world data
-glm::vec3 lightDirection = glm::normalize(glm::vec3(-.5f, -0.5f, -0.5f));
-glm::vec3 cameraPosition = glm::vec3(0, 2.5f, -5.0f);
-
-glm::mat4 view;
-glm::mat4 projection;
-
-GLuint boxVAO, boxEBO;
-int boxSize, boxIndexCount;
 
 float lastX, lastY;
 bool firstMouse = true;
 float camYaw, camPitch;
+
+//world data
+glm::vec3 lightDirection = glm::normalize(glm::vec3(-0.5f, -0.5f, -0.5f));
+glm::vec3 cameraPosition = glm::vec3(100, 125.0f, 100.0f);
+glm::quat camQuat = glm::quat(glm::vec3(glm::radians(camPitch), glm::radians(camYaw), 0));
+
+glm::mat4 view;
+glm::mat4 projection;
+
+GLuint boxVAO, boxEBO, boxTex;
+int boxSize, boxIndexCount;
+
+//Terrain Data
+
+GLuint terrainVAO, terrainIndexCount, heightMapID, heightMapNormalID;
+unsigned char* heightmapData;
+
+GLuint dirt, sand, grass, rock, snow;
+
+Model* backpack;
 
 int main()
 {
@@ -53,17 +71,23 @@ int main()
     CreateGeometry(boxVAO, boxEBO, boxSize, boxIndexCount);
     CreateShaders();
     
+    //Terrain
+    terrainVAO = GeneratePlane("textures/heightmap.png", heightmapData, GL_RGBA, 4, 150.0f, 5.0f, terrainIndexCount, heightMapID);
+    heightMapNormalID = loadTexture("textures/heightnormal.png");
+
+    dirt = loadTexture("textures/dirt.jpg", 4);
+    sand = loadTexture("textures/sand.jpg", 4);
+    grass = loadTexture("textures/grass.png", 4);
+    rock = loadTexture("textures/rock.jpg", 4);
+    snow = loadTexture("textures/snow.jpg", 4);
+
+    backpack = new Model("models/backpack/backpack.obj");
+
     //Box textures
-    GLuint boxTex = loadTexture("textures/container2.png");
+    boxTex = loadTexture("textures/container2.png");
     GLuint boxNormal = loadTexture("textures/container2normal.png");
     //Gradient tex for cell shading
     GLuint gradientTex = loadTexture("textures/GradientTexture2.png");
-
-    //Set texture channels
-    glUseProgram(simpleProgram);
-    glUniform1i(glGetUniformLocation(simpleProgram, "mainTex"), 0);
-    glUniform1i(glGetUniformLocation(simpleProgram, "normalTex"), 1);
-    glUniform1i(glGetUniformLocation(simpleProgram, "gradientTex"), 2);
 
     glViewport(0, 0, WIDTH, HEIGHT);
 
@@ -77,17 +101,21 @@ int main()
     world = glm::scale(world, glm::vec3(1, 1, 1));
     world = glm::translate(world, glm::vec3(0, 0, 0));*/
 
-    view = glm::lookAt(glm::vec3(0, 2.5f, -5.0f), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
-    projection = glm::perspective(glm::radians(25.0f), WIDTH / (float)HEIGHT, 0.1f, 100.0f);
+    view = glm::lookAt(cameraPosition, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+    projection = glm::perspective(glm::radians(45.0f), WIDTH / (float)HEIGHT, 0.05f, 10000.0f);
 
     while (!glfwWindowShouldClose(window))
     {
         //Input
         ProcessInput(window);
 
-        //RenderBox(world, view, projection, boxTex, boxNormal, gradientTex, boxVAO, boxIndexCount);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+        //RenderBox(view, projection, boxTex, boxNormal, gradientTex, boxVAO, boxIndexCount);
 
         RenderSkyBox();
+        RenderTerrain();
 
         //Swap & Poll
         glfwSwapBuffers(window);
@@ -103,6 +131,7 @@ void RenderSkyBox()
     // OpenGL Setup
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
+    glDisable(GL_DEPTH);
 
     glUseProgram(skyBoxProgram);
 
@@ -112,24 +141,213 @@ void RenderSkyBox()
     //Update world matrix everytime objects are moved/changed/scaled
 
     glm::mat4 world = glm::mat4(1.0f);
-    world = glm::translate(world, glm::vec3(0, 0, 0));
-    world = glm::scale(world, glm::vec3(10, 10, 10));
+    world = glm::translate(world, cameraPosition);
+    world = glm::scale(world, glm::vec3(100, 100, 100));
 
     glUniformMatrix4fv(glGetUniformLocation(skyBoxProgram, "world"), 1, GL_FALSE, glm::value_ptr(world));
     glUniformMatrix4fv(glGetUniformLocation(skyBoxProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(glGetUniformLocation(skyBoxProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 
+    glUniform3fv(glGetUniformLocation(skyBoxProgram, "lightDirection"), 1, glm::value_ptr(lightDirection));
+    glUniform3fv(glGetUniformLocation(skyBoxProgram, "cameraPosition"), 1, glm::value_ptr(cameraPosition));
+
     glBindVertexArray(boxVAO);
     glDrawElements(GL_TRIANGLES, boxIndexCount, GL_UNSIGNED_INT, 0);
 
     glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
     glEnable(GL_DEPTH);
+}
+
+void RenderTerrain()
+{
+    glEnable(GL_DEPTH);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+
+    glUseProgram(terrainProgram);
+
+    glm::mat4 world = glm::mat4(1.0f);
+
+    //glUniform1i(glGetUniformLocation(terrainProgram, "mainTex"), 0);
+
+    glUniformMatrix4fv(glGetUniformLocation(terrainProgram, "world"), 1, GL_FALSE, glm::value_ptr(world));
+    glUniformMatrix4fv(glGetUniformLocation(terrainProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(terrainProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+
+    //make the sun move
+    float t = glfwGetTime();
+    lightDirection = glm::normalize(glm::vec3(glm::sin(t), -0.5f, glm::cos(t)));
+
+    glUniform3fv(glGetUniformLocation(terrainProgram, "lightDirection"), 1, glm::value_ptr(lightDirection));
+    glUniform3fv(glGetUniformLocation(terrainProgram, "cameraPosition"), 1, glm::value_ptr(cameraPosition));
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, heightMapID);
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, heightMapNormalID);
+
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, dirt);
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, sand);
+    glActiveTexture(GL_TEXTURE4);
+    glBindTexture(GL_TEXTURE_2D, grass);
+    glActiveTexture(GL_TEXTURE5);
+    glBindTexture(GL_TEXTURE_2D, rock);
+    glActiveTexture(GL_TEXTURE6);
+    glBindTexture(GL_TEXTURE_2D, snow);
+
+    //std::cout << heightmapID << std::endl;
+
+    glBindVertexArray(terrainVAO);
+    glDrawElements(GL_TRIANGLES, terrainIndexCount, GL_UNSIGNED_INT, 0);
+}
+
+unsigned int GeneratePlane(const char* heightmap, unsigned char* &data, GLenum format, int comp, float hScale, float xzScale, unsigned int& indexCount, unsigned int& heightmapID) {
+    int width, height, channels;
+    //unsigned char* data = nullptr;
+    if (heightmap != nullptr) {
+        data = stbi_load(heightmap, &width, &height, &channels, comp);
+        if (data) {
+            glGenTextures(1, &heightmapID);
+            glBindTexture(GL_TEXTURE_2D, heightmapID);
+
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+            glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+
+            glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format, GL_UNSIGNED_BYTE, data);
+            glGenerateMipmap(GL_TEXTURE_2D);
+            glBindTexture(GL_TEXTURE_2D, 0);
+        }
+
+        std::cout << "Heightmap Loaded! " << heightmapID << std::endl;
+    }
+
+    int stride = 8;
+    float* vertices = new float[(width * height) * stride];
+    unsigned int* indices = new unsigned int[(width - 1) * (height - 1) * 6];
+
+    int vertexIndex = 0;
+    for (int i = 0; i < (width * height); i++) {
+        // TODO: calculate x/z values
+        int x = i % width;
+        int z = i / width;
+
+        float texHeight = (float)data[i * comp];
+
+        // TODO: set position
+        vertices[vertexIndex++] = x * xzScale;
+        vertices[vertexIndex++] = (texHeight / 255.0f) * hScale;
+        vertices[vertexIndex++] = z * xzScale;
+
+        // TODO: set normal
+        vertices[vertexIndex++] = 0;
+        vertices[vertexIndex++] = 1;
+        vertices[vertexIndex++] = 0;
+
+        // TODO: set uv
+        vertices[vertexIndex++] = x / (float)width;
+        vertices[vertexIndex++] = z / (float)height;
+
+    }
+
+    // OPTIONAL TODO: Calculate normal
+    // TODO: Set normal
+
+    vertexIndex = 0;
+    for (int i = 0; i < (width - 1) * (height - 1); i++) {
+        // TODO: calculate x/z values
+        int x = i % (width - 1);
+        int z = i / (width - 1);
+
+        int vertex = z * width + x;
+
+        indices[vertexIndex++] = vertex;
+        indices[vertexIndex++] = vertex + width;
+        indices[vertexIndex++] = vertex + width + 1;
+        
+        indices[vertexIndex++] = vertex;
+        indices[vertexIndex++] = vertex + width + 1;
+        indices[vertexIndex++] = vertex + 1;
+
+    }
+
+    unsigned int vertSize = (width * height) * stride * sizeof(float);
+    indexCount = ((width - 1) * (height - 1) * 6);
+
+    unsigned int VAO, VBO, EBO;
+    glGenVertexArrays(1, &VAO);
+    glGenBuffers(1, &VBO);
+    glGenBuffers(1, &EBO);
+
+    glBindVertexArray(VAO);
+
+    glBindBuffer(GL_ARRAY_BUFFER, VBO);
+    glBufferData(GL_ARRAY_BUFFER, vertSize, vertices, GL_STATIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, indexCount * sizeof(unsigned int), indices, GL_STATIC_DRAW);
+
+    // vertex information!
+    // position
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(float) * stride, 0);
+    glEnableVertexAttribArray(0);
+    // normal
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(float) * stride, (void*)(sizeof(float) * 3));
+    glEnableVertexAttribArray(1);
+    // uv
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(float) * stride, (void*)(sizeof(float) * 6));
+    glEnableVertexAttribArray(2);
+
+    glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+    glBindVertexArray(0);
+
+    delete[] vertices;
+    delete[] indices;
+
+    //stbi_image_free(data);
+
+    std::cout << "Plane generated! " << VAO << std::endl;
+
+    return VAO;
 }
 
 void ProcessInput(GLFWwindow* window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
+
+    bool camChanged = false;
+
+    if(keys[GLFW_KEY_W])
+    {
+        cameraPosition += camQuat * glm::vec3(0, 0, 1) * 0.2f;
+        camChanged = true;
+    }
+    if (keys[GLFW_KEY_A])
+    {
+        cameraPosition += camQuat * glm::vec3(1, 0, 0) * 0.2f;
+        camChanged = true;
+    }
+    if (keys[GLFW_KEY_S])
+    {
+        cameraPosition += camQuat * glm::vec3(0, 0, -1 * 0.2f);
+        camChanged = true;
+    }
+    if (keys[GLFW_KEY_D])
+    {
+        cameraPosition += camQuat * glm::vec3(-1, 0, 0) * 0.2f;
+        camChanged = true;
+    }
+
+    if(camChanged)
+    {
+        glm::vec3 camForward = camQuat * glm::vec3(0, 0, 1);
+        glm::vec3 camUp = camQuat * glm::vec3(0, 1, 0);
+        view = glm::lookAt(cameraPosition, cameraPosition + camForward, camUp);
+    }
 }
 
 int Init(GLFWwindow*& window)
@@ -148,6 +366,7 @@ int Init(GLFWwindow*& window)
     }
     //Register callbacks
     glfwSetCursorPosCallback(window, Mouse_Callback);
+    glfwSetKeyCallback(window, Key_Callback);
 
     glfwMakeContextCurrent(window);
 
@@ -261,7 +480,25 @@ void CreateGeometry(GLuint &VAO, GLuint &EBO, int &size, int &numIndices)
 void CreateShaders()
 {
     CreateProgram(simpleProgram, "shaders/Vertex.shader", "shaders/Fragment.shader");
+
+    //Set texture channels
+    glUseProgram(simpleProgram);
+    glUniform1i(glGetUniformLocation(simpleProgram, "mainTex"), 0);
+    glUniform1i(glGetUniformLocation(simpleProgram, "normalTex"), 1);
+    glUniform1i(glGetUniformLocation(simpleProgram, "gradientTex"), 2);
+
     CreateProgram(skyBoxProgram, "shaders/skyboxVertex.shader", "shaders/skyboxFragment.shader");
+    CreateProgram(terrainProgram, "shaders/terrainVertex.shader", "shaders/terrainFragment.shader");
+
+    glUseProgram(terrainProgram);
+    glUniform1i(glGetUniformLocation(terrainProgram, "mainTex"), 0);
+    glUniform1i(glGetUniformLocation(terrainProgram, "normalTex"), 1);
+
+    glUniform1i(glGetUniformLocation(terrainProgram, "dirt"), 2);
+    glUniform1i(glGetUniformLocation(terrainProgram, "sand"), 3);
+    glUniform1i(glGetUniformLocation(terrainProgram, "grass"), 4);
+    glUniform1i(glGetUniformLocation(terrainProgram, "rock"), 5);
+    glUniform1i(glGetUniformLocation(terrainProgram, "snow"), 6);
 
 }
 
@@ -342,7 +579,7 @@ void LoadFile(const char* filename, char*& output)
     }
 }
 
-GLuint loadTexture(const char* path)
+GLuint loadTexture(const char* path, int comp)
 {
     GLuint textureID;
     glGenTextures(1, &textureID);
@@ -352,10 +589,11 @@ GLuint loadTexture(const char* path)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     int width, height, numChannels;
-    unsigned char* data = stbi_load(path, &width, &height, &numChannels, 0);
+    unsigned char* data = stbi_load(path, &width, &height, &numChannels, comp);
 
     if(data)
     {
+        if (comp != 0) numChannels = comp;
         if(numChannels == 3)
         {
             glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
@@ -377,10 +615,15 @@ GLuint loadTexture(const char* path)
     return textureID;
 }
 
-void RenderBox(glm::mat4 &world, glm::mat4 &view, glm::mat4 &projection, GLuint &boxTex, GLuint &boxNormal, GLuint &gradientTex, GLuint &triangleVAO, int triangleIndexCount)
+void RenderBox(glm::mat4 &view, glm::mat4 &projection, GLuint &boxTex, GLuint &boxNormal, GLuint &gradientTex, GLuint &triangleVAO, int triangleIndexCount)
 {
     glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
+
+    glm::mat4 world = glm::mat4(1.0f);
+    world = glm::rotate(world, glm::radians(45.0f), glm::vec3(0, 1, 0));
+    world = glm::scale(world, glm::vec3(1, 1, 1));
+    world = glm::translate(world, glm::vec3(0, 0, 0));
 
     glUniformMatrix4fv(glGetUniformLocation(simpleProgram, "world"), 1, GL_FALSE, glm::value_ptr(world));
     glUniformMatrix4fv(glGetUniformLocation(simpleProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
@@ -414,6 +657,7 @@ void Mouse_Callback(GLFWwindow* window, double xpos, double ypos)
     {
         lastX = x;
         lastY = y;
+        firstMouse = false;
     }
 
     float dx = x - lastX;
@@ -421,8 +665,8 @@ void Mouse_Callback(GLFWwindow* window, double xpos, double ypos)
     lastX = x;
     lastY = y;
 
-    camYaw += dx;
-    camPitch = glm::clamp(camPitch + dy, -89.0f, 89.0f);
+    camYaw -= dx * 0.2;
+    camPitch = glm::clamp(camPitch + dy * 0.2f, -90.0f, 90.0f);
 
     if(camYaw > 180.0f)
     {
@@ -434,9 +678,23 @@ void Mouse_Callback(GLFWwindow* window, double xpos, double ypos)
         camYaw += 360.0f;
     }
 
-    glm::quat camQuat = glm::quat(glm::vec3(glm::radians(camPitch), glm::radians(camYaw), 0));
+    //std::cout << "CamYaw: " << camYaw << "CamPitch: " << camPitch << std::endl;
+    camQuat = glm::quat(glm::vec3(glm::radians(camPitch), glm::radians(camYaw), 0));
 
-    glm::vec3 camForward = glm::vec3(0, 0, 1);
-    glm::vec3 camUp = glm::vec3(0, 1, 0);
+    glm::vec3 camForward = camQuat * glm::vec3(0, 0, 1);
+    glm::vec3 camUp = camQuat * glm::vec3(0, 1, 0);
     view = glm::lookAt(cameraPosition, cameraPosition + camForward, camUp);
+}
+void Key_Callback(GLFWwindow* window, int key, int scancode, int action, int mods)
+{
+    if(action == GLFW_PRESS)
+    {
+        //store key is pressed
+        keys[key] = true;
+    }
+    else if(action == GLFW_RELEASE)
+    {
+        //store key is released
+        keys[key] = false;
+    }
 }
