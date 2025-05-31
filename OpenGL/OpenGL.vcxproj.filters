@@ -13,11 +13,11 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="Resource Files\Shaders">
-      <UniqueIdentifier>{83c8b8aa-604c-48cb-a45e-812fa8f904e6}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Resource Files\Textures">
       <UniqueIdentifier>{b80430fb-756e-49b8-958d-d067b571e194}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files\Textures\Shaders">
+      <UniqueIdentifier>{83c8b8aa-604c-48cb-a45e-812fa8f904e6}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -30,10 +30,16 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\Fragment.shader">
-      <Filter>Resource Files\Shaders</Filter>
+      <Filter>Resource Files\Textures\Shaders</Filter>
     </None>
     <None Include="shaders\Vertex.shader">
-      <Filter>Resource Files\Shaders</Filter>
+      <Filter>Resource Files\Textures\Shaders</Filter>
+    </None>
+    <None Include="shaders\skyboxFragment.shader">
+      <Filter>Resource Files\Textures\Shaders</Filter>
+    </None>
+    <None Include="shaders\skyboxVertex.shader">
+      <Filter>Resource Files\Textures\Shaders</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
@@ -41,6 +47,12 @@
       <Filter>Resource Files\Textures</Filter>
     </Image>
     <Image Include="textures\dirt.jpg">
+      <Filter>Resource Files\Textures</Filter>
+    </Image>
+    <Image Include="textures\container2normal.png">
+      <Filter>Resource Files\Textures</Filter>
+    </Image>
+    <Image Include="textures\GradientTexture.png">
       <Filter>Resource Files\Textures</Filter>
     </Image>
   </ItemGroup>

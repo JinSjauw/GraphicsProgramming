@@ -5,6 +5,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/quaternion.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
@@ -12,17 +13,36 @@
 void ProcessInput(GLFWwindow* window);
 int Init(GLFWwindow*& window);
 void CreateGeometry(GLuint &VAO, GLuint &EBO, int &size, int &numIndices);
-void CreateShader();
+void CreateShaders();
 void CreateProgram(GLuint& programID, const char* vertex, const char* fragment);
+void RenderBox(glm::mat4& world, glm::mat4& view, glm::mat4& projection, GLuint& boxTex, GLuint& boxNormal, GLuint& gradientTex, GLuint& triangleVAO, int triangleIndexCount);
+void RenderSkyBox();
+
+//Calbacks
+void Mouse_Callback(GLFWwindow* window, double xpos, double ypos);
 
 //Utils
 void LoadFile(const char* filename, char*& output);
 GLuint loadTexture(const char* path);
 
 //Program ID's
-GLuint simpleProgram;
+GLuint simpleProgram, skyBoxProgram;
 
 const int WIDTH = 1280, HEIGHT = 720;
+
+//world data
+glm::vec3 lightDirection = glm::normalize(glm::vec3(-.5f, -0.5f, -0.5f));
+glm::vec3 cameraPosition = glm::vec3(0, 2.5f, -5.0f);
+
+glm::mat4 view;
+glm::mat4 projection;
+
+GLuint boxVAO, boxEBO;
+int boxSize, boxIndexCount;
+
+float lastX, lastY;
+bool firstMouse = true;
+float camYaw, camPitch;
 
 int main()
 {
@@ -30,54 +50,44 @@ int main()
     int result = Init(window);
     if (result != 0) return result;
 
-    GLuint triangleVAO, triangleEBO;
-    int triangleSize;
-    int triangleIndexCount;
-
-    CreateGeometry(triangleVAO, triangleEBO, triangleSize, triangleIndexCount);
-    CreateShader();
+    CreateGeometry(boxVAO, boxEBO, boxSize, boxIndexCount);
+    CreateShaders();
     
+    //Box textures
     GLuint boxTex = loadTexture("textures/container2.png");
+    GLuint boxNormal = loadTexture("textures/container2normal.png");
+    //Gradient tex for cell shading
+    GLuint gradientTex = loadTexture("textures/GradientTexture2.png");
+
+    //Set texture channels
+    glUseProgram(simpleProgram);
+    glUniform1i(glGetUniformLocation(simpleProgram, "mainTex"), 0);
+    glUniform1i(glGetUniformLocation(simpleProgram, "normalTex"), 1);
+    glUniform1i(glGetUniformLocation(simpleProgram, "gradientTex"), 2);
 
     glViewport(0, 0, WIDTH, HEIGHT);
 
     //Matrices
 
-    glm::mat4 world = glm::mat4(1.0f);
+    //Update view matrix everytime camera moves
+    //Update world matrix everytime objects are moved/changed/scaled
+
+    /*glm::mat4 world = glm::mat4(1.0f);
     world = glm::rotate(world, glm::radians(45.0f), glm::vec3(0, 1, 0));
     world = glm::scale(world, glm::vec3(1, 1, 1));
-    world = glm::translate(world, glm::vec3(0, 0, 0));
+    world = glm::translate(world, glm::vec3(0, 0, 0));*/
 
-    glm::mat4 view = glm::lookAt(glm::vec3(0, 2.5f, -5.0f), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
-
-    glm::mat4 projection = glm::perspective(glm::radians(25.0f), WIDTH / (float)HEIGHT, 0.1f, 100.0f);
-
-    glm::vec3 lightPosition = glm::vec3(3, 3, 1);
+    view = glm::lookAt(glm::vec3(0, 2.5f, -5.0f), glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
+    projection = glm::perspective(glm::radians(25.0f), WIDTH / (float)HEIGHT, 0.1f, 100.0f);
 
     while (!glfwWindowShouldClose(window))
     {
         //Input
         ProcessInput(window);
 
-        // Rendering
-        glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT);
+        //RenderBox(world, view, projection, boxTex, boxNormal, gradientTex, boxVAO, boxIndexCount);
 
-        glUseProgram(simpleProgram);
-        
-        glUniformMatrix4fv(glGetUniformLocation(simpleProgram, "world"), 1, GL_FALSE, glm::value_ptr(world));
-        glUniformMatrix4fv(glGetUniformLocation(simpleProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
-        glUniformMatrix4fv(glGetUniformLocation(simpleProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-
-        glUniform3fv(glGetUniformLocation(simpleProgram, "lightPosition"), 1, glm::value_ptr(lightPosition));
-
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, boxTex);
-
-        glBindVertexArray(triangleVAO);
-        //glBindVertexArray(triangleEBO);
-        //glDrawArrays(GL_TRIANGLES, 0, triangleSize);
-        glDrawElements(GL_TRIANGLES, triangleIndexCount, GL_UNSIGNED_INT, 0);
+        RenderSkyBox();
 
         //Swap & Poll
         glfwSwapBuffers(window);
@@ -86,6 +96,34 @@ int main()
 
     glfwTerminate();
     return 0;
+}
+
+void RenderSkyBox()
+{
+    // OpenGL Setup
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+
+    glUseProgram(skyBoxProgram);
+
+    //Matrices
+
+    //Update view matrix everytime camera moves
+    //Update world matrix everytime objects are moved/changed/scaled
+
+    glm::mat4 world = glm::mat4(1.0f);
+    world = glm::translate(world, glm::vec3(0, 0, 0));
+    world = glm::scale(world, glm::vec3(10, 10, 10));
+
+    glUniformMatrix4fv(glGetUniformLocation(skyBoxProgram, "world"), 1, GL_FALSE, glm::value_ptr(world));
+    glUniformMatrix4fv(glGetUniformLocation(skyBoxProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(skyBoxProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+
+    glBindVertexArray(boxVAO);
+    glDrawElements(GL_TRIANGLES, boxIndexCount, GL_UNSIGNED_INT, 0);
+
+    glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH);
 }
 
 void ProcessInput(GLFWwindow* window)
@@ -108,6 +146,9 @@ int Init(GLFWwindow*& window)
         glfwTerminate();
         return -1;
     }
+    //Register callbacks
+    glfwSetCursorPosCallback(window, Mouse_Callback);
+
     glfwMakeContextCurrent(window);
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
@@ -123,41 +164,41 @@ void CreateGeometry(GLuint &VAO, GLuint &EBO, int &size, int &numIndices)
 {
     // need 24 vertices for normal/uv-mapped Cube
     float vertices[] = {
-        // positions            //colors            // tex coords   // normals
-        0.5f, -0.5f, -0.5f,     1.0f, 1.0f, 1.0f,   1.f, 0.f,       0.f, -1.f, 0.f,
-        0.5f, -0.5f, 0.5f,      1.0f, 1.0f, 1.0f,   1.f, 1.f,       0.f, -1.f, 0.f,
-        -0.5f, -0.5f, 0.5f,     1.0f, 1.0f, 1.0f,   0.f, 1.f,       0.f, -1.f, 0.f,
-        -0.5f, -0.5f, -.5f,     1.0f, 1.0f, 1.0f,   0.f, 0.f,       0.f, -1.f, 0.f,
+        // positions            //colors            // tex coords   // normals          //tangents      //bitangents
+        0.5f, -0.5f, -0.5f,     1.0f, 1.0f, 1.0f,   1.f, 1.f,       0.f, -1.f, 0.f,     -1.f, 0.f, 0.f,  0.f, 0.f, 1.f,
+        0.5f, -0.5f, 0.5f,      1.0f, 1.0f, 1.0f,   1.f, 0.f,       0.f, -1.f, 0.f,     -1.f, 0.f, 0.f,  0.f, 0.f, 1.f,
+        -0.5f, -0.5f, 0.5f,     1.0f, 1.0f, 1.0f,   0.f, 0.f,       0.f, -1.f, 0.f,     -1.f, 0.f, 0.f,  0.f, 0.f, 1.f,
+        -0.5f, -0.5f, -.5f,     1.0f, 1.0f, 1.0f,   0.f, 1.f,       0.f, -1.f, 0.f,     -1.f, 0.f, 0.f,  0.f, 0.f, 1.f,
 
-        0.5f, 0.5f, -0.5f,      1.0f, 1.0f, 1.0f,   2.f, 0.f,       1.f, 0.f, 0.f,
-        0.5f, 0.5f, 0.5f,       1.0f, 1.0f, 1.0f,   2.f, 1.f,       1.f, 0.f, 0.f,
+        0.5f, 0.5f, -0.5f,      1.0f, 1.0f, 1.0f,   1.f, 1.f,       1.f, 0.f, 0.f,     0.f, -1.f, 0.f,  0.f, 0.f, 1.f,
+        0.5f, 0.5f, 0.5f,       1.0f, 1.0f, 1.0f,   1.f, 0.f,       1.f, 0.f, 0.f,     0.f, -1.f, 0.f,  0.f, 0.f, 1.f,
 
-        0.5f, 0.5f, 0.5f,       1.0f, 1.0f, 1.0f,   1.f, 2.f,       0.f, 0.f, 1.f,
-        -0.5f, 0.5f, 0.5f,      1.0f, 1.0f, 1.0f,   0.f, 2.f,       0.f, 0.f, 1.f,
+        0.5f, 0.5f, 0.5f,       1.0f, 1.0f, 1.0f,   1.f, 0.f,       0.f, 0.f, 1.f,     1.f, 0.f, 0.f,  0.f, -1.f, 0.f,
+        -0.5f, 0.5f, 0.5f,      1.0f, 1.0f, 1.0f,   0.f, 0.f,       0.f, 0.f, 1.f,     1.f, 0.f, 0.f,  0.f, -1.f, 0.f,
 
-        -0.5f, 0.5f, 0.5f,      1.0f, 1.0f, 1.0f,   -1.f, 1.f,      -1.f, 0.f, 0.f,
-        -0.5f, 0.5f, -.5f,      1.0f, 1.0f, 1.0f,   -1.f, 0.f,      -1.f, 0.f, 0.f,
+        -0.5f, 0.5f, 0.5f,      1.0f, 1.0f, 1.0f,   0.f, 0.f,      -1.f, 0.f, 0.f,     0.f, 1.f, 0.f,  0.f, 0.f, 1.f,
+        -0.5f, 0.5f, -.5f,      1.0f, 1.0f, 1.0f,   0.f, 1.f,      -1.f, 0.f, 0.f,     0.f, 1.f, 0.f,  0.f, 0.f, 1.f,
 
-        -0.5f, 0.5f, -.5f,      1.0f, 1.0f, 1.0f,   0.f, -1.f,      0.f, 0.f, -1.f,
-        0.5f, 0.5f, -0.5f,      1.0f, 1.0f, 1.0f,   1.f, -1.f,      0.f, 0.f, -1.f,
+        -0.5f, 0.5f, -.5f,      1.0f, 1.0f, 1.0f,   0.f, 1.f,      0.f, 0.f, -1.f,     1.f, 0.f, 0.f,  0.f, 1.f, 0.f,
+        0.5f, 0.5f, -0.5f,      1.0f, 1.0f, 1.0f,   1.f, 1.f,      0.f, 0.f, -1.f,     1.f, 0.f, 0.f,  0.f, 1.f, 0.f,
 
-        -0.5f, 0.5f, -.5f,      1.0f, 1.0f, 1.0f,   3.f, 0.f,       0.f, 1.f, 0.f,
-        -0.5f, 0.5f, 0.5f,      1.0f, 1.0f, 1.0f,   3.f, 1.f,       0.f, 1.f, 0.f,
+        -0.5f, 0.5f, -.5f,      1.0f, 1.0f, 1.0f,   1.f, 1.f,       0.f, 1.f, 0.f,     1.f, 0.f, 0.f,  0.f, 0.f, 1.f,
+        -0.5f, 0.5f, 0.5f,      1.0f, 1.0f, 1.0f,   1.f, 0.f,       0.f, 1.f, 0.f,     1.f, 0.f, 0.f,  0.f, 0.f, 1.f,
 
-        0.5f, -0.5f, 0.5f,      1.0f, 1.0f, 1.0f,   1.f, 1.f,       0.f, 0.f, 1.f,
-        -0.5f, -0.5f, 0.5f,     1.0f, 1.0f, 1.0f,   0.f, 1.f,       0.f, 0.f, 1.f,
+        0.5f, -0.5f, 0.5f,      1.0f, 1.0f, 1.0f,   1.f, 1.f,       0.f, 0.f, 1.f,     1.f, 0.f, 0.f,  0.f, -1.f, 0.f,
+        -0.5f, -0.5f, 0.5f,     1.0f, 1.0f, 1.0f,   0.f, 1.f,       0.f, 0.f, 1.f,     1.f, 0.f, 0.f,  0.f, -1.f, 0.f,
 
-        -0.5f, -0.5f, 0.5f,     1.0f, 1.0f, 1.0f,   0.f, 1.f,       -1.f, 0.f, 0.f,
-        -0.5f, -0.5f, -.5f,     1.0f, 1.0f, 1.0f,   0.f, 0.f,       -1.f, 0.f, 0.f,
+        -0.5f, -0.5f, 0.5f,     1.0f, 1.0f, 1.0f,   1.f, 0.f,       -1.f, 0.f, 0.f,     0.f, 1.f, 0.f,  0.f, 0.f, 1.f,
+        -0.5f, -0.5f, -.5f,     1.0f, 1.0f, 1.0f,   1.f, 1.f,       -1.f, 0.f, 0.f,     0.f, 1.f, 0.f,  0.f, 0.f, 1.f,
 
-        -0.5f, -0.5f, -.5f,     1.0f, 1.0f, 1.0f,   0.f, 0.f,       0.f, 0.f, -1.f,
-        0.5f, -0.5f, -0.5f,     1.0f, 1.0f, 1.0f,   1.f, 0.f,       0.f, 0.f, -1.f,
+        -0.5f, -0.5f, -.5f,     1.0f, 1.0f, 1.0f,   0.f, 0.f,       0.f, 0.f, -1.f,     1.f, 0.f, 0.f,  0.f, 1.f, 0.f,
+        0.5f, -0.5f, -0.5f,     1.0f, 1.0f, 1.0f,   1.f, 0.f,       0.f, 0.f, -1.f,     1.f, 0.f, 0.f,  0.f, 1.f, 0.f,
 
-        0.5f, -0.5f, -0.5f,     1.0f, 1.0f, 1.0f,   1.f, 0.f,       1.f, 0.f, 0.f,
-        0.5f, -0.5f, 0.5f,      1.0f, 1.0f, 1.0f,   1.f, 1.f,       1.f, 0.f, 0.f,
+        0.5f, -0.5f, -0.5f,     1.0f, 1.0f, 1.0f,   0.f, 1.f,       1.f, 0.f, 0.f,     0.f, -1.f, 0.f,  0.f, 0.f, 1.f,
+        0.5f, -0.5f, 0.5f,      1.0f, 1.0f, 1.0f,   0.f, 0.f,       1.f, 0.f, 0.f,     0.f, -1.f, 0.f,  0.f, 0.f, 1.f,
 
-        0.5f, 0.5f, -0.5f,      1.0f, 1.0f, 1.0f,   2.f, 0.f,       0.f, 1.f, 0.f,
-        0.5f, 0.5f, 0.5f,       1.0f, 1.0f, 1.0f,   2.f, 1.f,       0.f, 1.f, 0.f
+        0.5f, 0.5f, -0.5f,      1.0f, 1.0f, 1.0f,   0.f, 1.f,       0.f, 1.f, 0.f,     1.f, 0.f, 0.f,  0.f, 0.f, 1.f,
+        0.5f, 0.5f, 0.5f,       1.0f, 1.0f, 1.0f,   0.f, 0.f,       0.f, 1.f, 0.f,     1.f, 0.f, 0.f,  0.f, 0.f, 1.f
     };
 
     unsigned int indices[] = {  // note that we start from 0!
@@ -181,7 +222,7 @@ void CreateGeometry(GLuint &VAO, GLuint &EBO, int &size, int &numIndices)
         22, 13, 23,    // second triangle
     };
     
-    int stride = (3 + 3 + 2 + 3) * sizeof(float);
+    int stride = (3 + 3 + 2 + 3 + 3 + 3) * sizeof(float);
     size = sizeof(vertices) / stride;
     numIndices = sizeof(indices) / sizeof(int);
 
@@ -209,11 +250,19 @@ void CreateGeometry(GLuint &VAO, GLuint &EBO, int &size, int &numIndices)
 
     glVertexAttribPointer(3, 3, GL_FLOAT, GL_TRUE, stride, (void*)(8 * sizeof(float)));
     glEnableVertexAttribArray(3);
+
+    glVertexAttribPointer(4, 3, GL_FLOAT, GL_TRUE, stride, (void*)(11 * sizeof(float)));
+    glEnableVertexAttribArray(4);
+
+    glVertexAttribPointer(5, 3, GL_FLOAT, GL_TRUE, stride, (void*)(14 * sizeof(float)));
+    glEnableVertexAttribArray(5);
 }
 
-void CreateShader()
+void CreateShaders()
 {
     CreateProgram(simpleProgram, "shaders/Vertex.shader", "shaders/Fragment.shader");
+    CreateProgram(skyBoxProgram, "shaders/skyboxVertex.shader", "shaders/skyboxFragment.shader");
+
 }
 
 void CreateProgram(GLuint& programID, const char* vertex, const char* fragment)
@@ -326,4 +375,68 @@ GLuint loadTexture(const char* path)
     glBindTexture(GL_TEXTURE_2D, 0);
     
     return textureID;
+}
+
+void RenderBox(glm::mat4 &world, glm::mat4 &view, glm::mat4 &projection, GLuint &boxTex, GLuint &boxNormal, GLuint &gradientTex, GLuint &triangleVAO, int triangleIndexCount)
+{
+    glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    glUniformMatrix4fv(glGetUniformLocation(simpleProgram, "world"), 1, GL_FALSE, glm::value_ptr(world));
+    glUniformMatrix4fv(glGetUniformLocation(simpleProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(simpleProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+
+    glUniform3fv(glGetUniformLocation(simpleProgram, "lightPosition"), 1, glm::value_ptr(lightDirection));
+    glUniform3fv(glGetUniformLocation(simpleProgram, "cameraPosition"), 1, glm::value_ptr(cameraPosition));
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, boxTex);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, boxNormal);
+
+    //For cellshading
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, gradientTex);
+
+    glBindVertexArray(triangleVAO);
+    //glBindVertexArray(triangleEBO);
+    //glDrawArrays(GL_TRIANGLES, 0, triangleSize);
+    glDrawElements(GL_TRIANGLES, triangleIndexCount, GL_UNSIGNED_INT, 0);
+}
+
+void Mouse_Callback(GLFWwindow* window, double xpos, double ypos)
+{
+    float x = (float)xpos;
+    float y = (float)ypos;
+
+    if(firstMouse)
+    {
+        lastX = x;
+        lastY = y;
+    }
+
+    float dx = x - lastX;
+    float dy = y - lastY;
+    lastX = x;
+    lastY = y;
+
+    camYaw += dx;
+    camPitch = glm::clamp(camPitch + dy, -89.0f, 89.0f);
+
+    if(camYaw > 180.0f)
+    {
+        camYaw -= 360.0f;
+    }
+
+    if(camYaw < -180.0f)
+    {
+        camYaw += 360.0f;
+    }
+
+    glm::quat camQuat = glm::quat(glm::vec3(glm::radians(camPitch), glm::radians(camYaw), 0));
+
+    glm::vec3 camForward = glm::vec3(0, 0, 1);
+    glm::vec3 camUp = glm::vec3(0, 1, 0);
+    view = glm::lookAt(cameraPosition, cameraPosition + camForward, camUp);
 }

@@ -173,11 +173,15 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\Fragment.shader" />
+    <None Include="shaders\skyboxFragment.shader" />
+    <None Include="shaders\skyboxVertex.shader" />
     <None Include="shaders\Vertex.shader" />
   </ItemGroup>
   <ItemGroup>
     <Image Include="textures\container2.png" />
     <Image Include="textures\dirt.jpg" />
+    <Image Include="textures\container2normal.png" />
+    <Image Include="textures\GradientTexture.png" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="stb_image.h" />
