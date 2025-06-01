@@ -20,7 +20,7 @@ void CreateShaders();
 void CreateProgram(GLuint& programID, const char* vertex, const char* fragment);
 
 unsigned int GeneratePlane(const char* heightmap, unsigned char* &data, GLenum format, int comp, float hScale, float xzScale, unsigned int& indexCount, unsigned int& heightmapID);
-void RenderBox(glm::mat4& view, glm::mat4& projection, GLuint& boxTex, GLuint& boxNormal, GLuint& gradientTex, GLuint& triangleVAO, int triangleIndexCount);
+void RenderBox(glm::mat4& view, glm::mat4& projection, int triangleIndexCount, glm::vec3 pos, glm::vec3 rot, glm::vec3 scale);
 void RenderSkyBox();
 void RenderTerrain();
 void RenderModel(Model* model, GLuint& programID, glm::vec3 pos, glm::vec3 rot, glm::vec3 scale, glm::vec4 color = glm::vec4(0, 0, 0, 0), bool untextured = false);
@@ -52,7 +52,7 @@ glm::quat camQuat = glm::quat(glm::vec3(glm::radians(camPitch), glm::radians(cam
 glm::mat4 view;
 glm::mat4 projection;
 
-GLuint boxVAO, boxEBO, boxTex;
+GLuint boxVAO, boxEBO, boxTex, boxNormal, boxGradientTex;
 int boxSize, boxIndexCount;
 
 //Terrain Data
@@ -93,9 +93,9 @@ int main()
 
     //Box textures
     boxTex = loadTexture("textures/container2.png");
-    GLuint boxNormal = loadTexture("textures/container2normal.png");
+    boxNormal = loadTexture("textures/container2normal.png");
     //Gradient tex for cell shading
-    GLuint gradientTex = loadTexture("textures/GradientTexture2.png");
+    boxGradientTex = loadTexture("textures/GradientTexture2.png");
 
     glViewport(0, 0, WIDTH, HEIGHT);
 
@@ -120,13 +120,14 @@ int main()
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        //RenderBox(view, projection, boxTex, boxNormal, gradientTex, boxVAO, boxIndexCount);
+        
         float t = glfwGetTime();
 
         RenderSkyBox();
         RenderTerrain();
+        RenderBox(view, projection, boxIndexCount, glm::vec3(100, 350, 300), glm::vec3(t * 0.2, t * .4, t * -0.2), glm::vec3(200, 200, 200));
         RenderModel(backpack, modelProgram, glm::vec3(800, 350, 1100), glm::vec3(0, t * .2, 0), glm::vec3(200, 200, 200));
-        RenderModel(house, untexturedModelProgram, glm::vec3(800, 750, 1100), glm::vec3(0, t * 2, 0), glm::vec3(25, 25, 25), glm::vec4(1, 1, 0, 1), true);
+        RenderModel(house, untexturedModelProgram, glm::vec3(1500, 20, 1300), glm::vec3(0, t * 5, 0), glm::vec3(5, 5, 5), glm::vec4(1, 1, 0, 1), true);
         RenderModel(ironMan, untexturedModelProgram, glm::vec3(800, -900, 1100), glm::vec3(0, t * .2, 0), glm::vec3(7, 7, 7), glm::vec4(1, 0, 0, 1), true);
 
         //Swap & Poll
@@ -684,21 +685,28 @@ GLuint loadTexture(const char* path, int comp)
     return textureID;
 }
 
-void RenderBox(glm::mat4 &view, glm::mat4 &projection, GLuint &boxTex, GLuint &boxNormal, GLuint &gradientTex, GLuint &triangleVAO, int triangleIndexCount)
+void RenderBox(glm::mat4 &view, glm::mat4 &projection, int triangleIndexCount, glm::vec3 pos, glm::vec3 rot, glm::vec3 scale)
 {
-    glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT);
+   /* glClearColor(0.2f, 0.3f, 0.3f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);*/
+
+    glEnable(GL_DEPTH);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
 
     glm::mat4 world = glm::mat4(1.0f);
-    world = glm::rotate(world, glm::radians(45.0f), glm::vec3(0, 1, 0));
-    world = glm::scale(world, glm::vec3(1, 1, 1));
-    world = glm::translate(world, glm::vec3(0, 0, 0));
+    world = glm::translate(world, pos);
+    world = world * glm::toMat4(glm::quat(rot));
+    world = glm::scale(world, scale);
+
+    glUseProgram(simpleProgram);
 
     glUniformMatrix4fv(glGetUniformLocation(simpleProgram, "world"), 1, GL_FALSE, glm::value_ptr(world));
     glUniformMatrix4fv(glGetUniformLocation(simpleProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(glGetUniformLocation(simpleProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 
-    glUniform3fv(glGetUniformLocation(simpleProgram, "lightPosition"), 1, glm::value_ptr(lightDirection));
+    glUniform3fv(glGetUniformLocation(simpleProgram, "lightDirection"), 1, glm::value_ptr(lightDirection));
     glUniform3fv(glGetUniformLocation(simpleProgram, "cameraPosition"), 1, glm::value_ptr(cameraPosition));
 
     glActiveTexture(GL_TEXTURE0);
@@ -709,9 +717,9 @@ void RenderBox(glm::mat4 &view, glm::mat4 &projection, GLuint &boxTex, GLuint &b
 
     //For cellshading
     glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, gradientTex);
+    glBindTexture(GL_TEXTURE_2D, boxGradientTex);
 
-    glBindVertexArray(triangleVAO);
+    glBindVertexArray(boxVAO);
     //glBindVertexArray(triangleEBO);
     //glDrawArrays(GL_TRIANGLES, 0, triangleSize);
     glDrawElements(GL_TRIANGLES, triangleIndexCount, GL_UNSIGNED_INT, 0);

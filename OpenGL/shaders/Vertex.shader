@@ -9,13 +9,12 @@ layout(location = 5) in vec3 vBiTangent;
 out vec3 color;
 out vec2 uv;
 out mat3 tbn;
-out vec3 worldPosition;
+out vec4 FragPos;
 
 uniform mat4 world, view, projection;
 
 void main()
 {
-    gl_Position = projection * view * world * vec4(aPos, 1.0);
     color = vColor;
     uv = vUV;
     vec3 n = normalize(mat3(world) * vNormal);
@@ -23,5 +22,6 @@ void main()
     vec3 b = normalize(mat3(world) * vBiTangent);
     tbn = mat3(t, b, n);
 
-    worldPosition = mat3(world) * aPos;
+    FragPos = world * vec4(aPos, 1.0);
+    gl_Position = projection * view * FragPos;
 }

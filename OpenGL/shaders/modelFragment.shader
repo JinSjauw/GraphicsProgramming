@@ -28,8 +28,6 @@ float lerp(float a, float b, float t) {
 
 void main()
 {
-   
-    //vec4 diffuse = texture(texture_diffuse1, TexCoords);
     vec4 diffuse = texture(texture_diffuse1, TexCoords);
     vec4 specTex = texture(texture_specular1, TexCoords);
 
@@ -53,12 +51,6 @@ void main()
     vec3 fogColor = lerp(bottomColor, topColor, max(viewDirection.y, 0.0));
 
     vec4 result = lerp(diffuse * max(light * ambientOcclusion, 0.2 * ambientOcclusion) + vec4(specular, 0), vec4(fogColor, 1.0), fog);
-    
-    //clip at threshold
-    // if(result.a < 0.5)
-    // {
-    //     discard;
-    // }
 
     FragColor = result;
 }
