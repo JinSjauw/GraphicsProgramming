@@ -5,12 +5,7 @@ in vec2 TexCoords;
 in vec3 Normals;
 in vec4 FragPos;
 
-uniform sampler2D texture_diffuse1;
-uniform sampler2D texture_specular1;
-uniform sampler2D texture_normal1;
-uniform sampler2D texture_roughness1;
-uniform sampler2D texture_ao1;
-
+uniform vec4 defaultColor = vec4(0, 0, 0, 1);
 uniform vec3 cameraPosition;
 uniform vec3 lightDirection;
 
@@ -28,21 +23,18 @@ float lerp(float a, float b, float t) {
 
 void main()
 {
-   
-    //vec4 diffuse = texture(texture_diffuse1, TexCoords);
-    vec4 diffuse = texture(texture_diffuse1, TexCoords);
-    vec4 specTex = texture(texture_specular1, TexCoords);
+  
+    vec4 diffuse = defaultColor;
 
     float light = max(dot(-lightDirection, Normals), 0.0);
 
     vec3 viewDirection = normalize(FragPos.rgb - cameraPosition);
     vec3 refl = reflect(lightDirection, Normals);
-
-    float ambientOcclusion = texture(texture_ao1, TexCoords).r;
     
-    float roughness = texture(texture_roughness1, TexCoords).r;
-    float spec = pow(max(dot(-viewDirection, refl), 0.0), lerp(1, 128, roughness));
-    vec3 specular = spec * specTex.rgb;
+    //float specular = pow(max(dot(-viewDirection, refl), 0.0), lerp(1, 128, roughness));
+    float spec = pow(max(-dot( refl, viewDirection), 0.0), 256);
+
+    vec3 specular = spec * vec3(1, 1, 1);
     
     float distance = length(FragPos.xyz - cameraPosition);
     float fog = pow(clamp((distance - 250) / 1000, 0, 1), 2);
@@ -52,13 +44,7 @@ void main()
     
     vec3 fogColor = lerp(bottomColor, topColor, max(viewDirection.y, 0.0));
 
-    vec4 result = lerp(diffuse * max(light * ambientOcclusion, 0.2 * ambientOcclusion) + vec4(specular, 0), vec4(fogColor, 1.0), fog);
-    
-    //clip at threshold
-    // if(result.a < 0.5)
-    // {
-    //     discard;
-    // }
+    vec4 result = lerp(diffuse * max(light, 0.2) + vec4(specular, 0), vec4(fogColor, 1.0), fog);
 
     FragColor = result;
 }

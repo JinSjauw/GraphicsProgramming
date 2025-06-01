@@ -43,9 +43,9 @@ void main()
     float y = worldPosition.y;
 
     float dirtToSand = clamp((y - 20) / 10, -1, 1) * .5 + .5;
-    float sandToGrass = clamp((y - 40) / 10, -1, 1) * .5 + .5;
-    float grassToRock = clamp((y - 90) / 10, -1, 1) * .5 + .5;
-    float rockToSnow = clamp((y - 125) / 10, -1, 1) * .5 + .5;
+    float sandToGrass = clamp((y - 60) / 10, -1, 1) * .5 + .5;
+    float grassToRock = clamp((y - 120) / 10, -1, 1) * .5 + .5;
+    float rockToSnow = clamp((y - 160) / 10, -1, 1) * .5 + .5;
 
     float distance = length(worldPosition.xyz - cameraPosition);
     float uvLerp = clamp((distance - 250) / 150, -1, 1) * 0.5f + 0.5f;

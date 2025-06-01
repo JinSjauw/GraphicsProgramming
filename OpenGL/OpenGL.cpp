@@ -18,10 +18,12 @@ int Init(GLFWwindow*& window);
 void CreateGeometry(GLuint &VAO, GLuint &EBO, int &size, int &numIndices);
 void CreateShaders();
 void CreateProgram(GLuint& programID, const char* vertex, const char* fragment);
+
 unsigned int GeneratePlane(const char* heightmap, unsigned char* &data, GLenum format, int comp, float hScale, float xzScale, unsigned int& indexCount, unsigned int& heightmapID);
 void RenderBox(glm::mat4& view, glm::mat4& projection, GLuint& boxTex, GLuint& boxNormal, GLuint& gradientTex, GLuint& triangleVAO, int triangleIndexCount);
 void RenderSkyBox();
 void RenderTerrain();
+void RenderModel(Model* model, GLuint& programID, glm::vec3 pos, glm::vec3 rot, glm::vec3 scale, glm::vec4 color = glm::vec4(0, 0, 0, 0), bool untextured = false);
 
 //Callbacks
 void Mouse_Callback(GLFWwindow* window, double xpos, double ypos);
@@ -34,7 +36,7 @@ void LoadFile(const char* filename, char*& output);
 GLuint loadTexture(const char* path, int comp = 0);
 
 //Program ID's
-GLuint simpleProgram, skyBoxProgram, terrainProgram;
+GLuint simpleProgram, skyBoxProgram, terrainProgram, modelProgram, untexturedModelProgram;
 
 const int WIDTH = 1280, HEIGHT = 720;
 
@@ -61,19 +63,23 @@ unsigned char* heightmapData;
 GLuint dirt, sand, grass, rock, snow;
 
 Model* backpack;
+Model* house;
+Model* ironMan;
 
 int main()
 {
     GLFWwindow* window;
     int result = Init(window);
     if (result != 0) return result;
-
-    CreateGeometry(boxVAO, boxEBO, boxSize, boxIndexCount);
+    
+    stbi_set_flip_vertically_on_load(true);
+    
     CreateShaders();
+    CreateGeometry(boxVAO, boxEBO, boxSize, boxIndexCount);
     
     //Terrain
-    terrainVAO = GeneratePlane("textures/heightmap.png", heightmapData, GL_RGBA, 4, 150.0f, 5.0f, terrainIndexCount, heightMapID);
-    heightMapNormalID = loadTexture("textures/heightnormal.png");
+    terrainVAO = GeneratePlane("textures/heightmap3.png", heightmapData, GL_RGBA, 4, 250.0f, 5.0f, terrainIndexCount, heightMapID);
+    heightMapNormalID = loadTexture("textures/heightmapNormal3.png");
 
     dirt = loadTexture("textures/dirt.jpg", 4);
     sand = loadTexture("textures/sand.jpg", 4);
@@ -82,6 +88,8 @@ int main()
     snow = loadTexture("textures/snow.jpg", 4);
 
     backpack = new Model("models/backpack/backpack.obj");
+    house = new Model("models/cottage/cottage_obj.obj");
+    ironMan = new Model("models/IronMan/IronMan.obj");
 
     //Box textures
     boxTex = loadTexture("textures/container2.png");
@@ -113,9 +121,13 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         //RenderBox(view, projection, boxTex, boxNormal, gradientTex, boxVAO, boxIndexCount);
+        float t = glfwGetTime();
 
         RenderSkyBox();
         RenderTerrain();
+        RenderModel(backpack, modelProgram, glm::vec3(800, 350, 1100), glm::vec3(0, t * .2, 0), glm::vec3(200, 200, 200));
+        RenderModel(house, untexturedModelProgram, glm::vec3(800, 750, 1100), glm::vec3(0, t * 2, 0), glm::vec3(25, 25, 25), glm::vec4(1, 1, 0, 1), true);
+        RenderModel(ironMan, untexturedModelProgram, glm::vec3(800, -900, 1100), glm::vec3(0, t * .2, 0), glm::vec3(7, 7, 7), glm::vec4(1, 0, 0, 1), true);
 
         //Swap & Poll
         glfwSwapBuffers(window);
@@ -177,8 +189,8 @@ void RenderTerrain()
     glUniformMatrix4fv(glGetUniformLocation(terrainProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
 
     //make the sun move
-    float t = glfwGetTime();
-    lightDirection = glm::normalize(glm::vec3(glm::sin(t), -0.5f, glm::cos(t)));
+    //float t = glfwGetTime();
+    //lightDirection = glm::normalize(glm::vec3(glm::sin(t), -0.5f, glm::cos(t)));
 
     glUniform3fv(glGetUniformLocation(terrainProgram, "lightDirection"), 1, glm::value_ptr(lightDirection));
     glUniform3fv(glGetUniformLocation(terrainProgram, "cameraPosition"), 1, glm::value_ptr(cameraPosition));
@@ -203,6 +215,50 @@ void RenderTerrain()
 
     glBindVertexArray(terrainVAO);
     glDrawElements(GL_TRIANGLES, terrainIndexCount, GL_UNSIGNED_INT, 0);
+}
+
+void RenderModel(Model* model, GLuint& programID, glm::vec3 pos, glm::vec3 rot, glm::vec3 scale, glm::vec4 color, bool untextured)
+{
+    //glEnable(GL_BLEND);
+    
+    //blends
+    
+    //alpha
+    //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    //additive 
+    //glBlendFunc(GL_ONE, GL_ONE);
+    //soft additive 
+    //glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_ONE);
+    //multiply
+    //glBlendFunc(GL_DST_COLOR, GL_ZERO);
+    //double multiply
+
+    glEnable(GL_DEPTH);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+
+    glUseProgram(programID);
+
+    glm::mat4 world = glm::mat4(1.0f);
+    world = glm::translate(world, pos);
+    world = world * glm::toMat4(glm::quat(rot));
+    world = glm::scale(world, scale);
+
+    glUniformMatrix4fv(glGetUniformLocation(programID, "world"), 1, GL_FALSE, glm::value_ptr(world));
+    glUniformMatrix4fv(glGetUniformLocation(programID, "view"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(programID, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
+
+    if(untextured)
+    {
+        glUniform4fv(glGetUniformLocation(programID, "defaultColor"), 1, glm::value_ptr(color));
+    }
+    glUniform3fv(glGetUniformLocation(programID, "lightDirection"), 1, glm::value_ptr(lightDirection));
+    glUniform3fv(glGetUniformLocation(programID, "cameraPosition"), 1, glm::value_ptr(cameraPosition));
+
+    model->Draw(programID);
+
+    glDisable(GL_BLEND);
 }
 
 unsigned int GeneratePlane(const char* heightmap, unsigned char* &data, GLenum format, int comp, float hScale, float xzScale, unsigned int& indexCount, unsigned int& heightmapID) {
@@ -500,6 +556,19 @@ void CreateShaders()
     glUniform1i(glGetUniformLocation(terrainProgram, "rock"), 5);
     glUniform1i(glGetUniformLocation(terrainProgram, "snow"), 6);
 
+    CreateProgram(modelProgram, "shaders/modelVertex.shader", "shaders/modelFragment.shader");
+
+    glUseProgram(modelProgram);
+
+    glUniform1i(glGetUniformLocation(modelProgram, "texture_diffuse1"), 0);
+    glUniform1i(glGetUniformLocation(modelProgram, "texture_specular1"), 1);
+    glUniform1i(glGetUniformLocation(modelProgram, "texture_normal1"), 2);
+    glUniform1i(glGetUniformLocation(modelProgram, "texture_roughness1"), 3);
+    glUniform1i(glGetUniformLocation(modelProgram, "texture_ao1"), 4);
+
+    CreateProgram(untexturedModelProgram, "shaders/modelVertex.shader", "shaders/modelUntexturedFragment.shader");
+
+    glUseProgram(untexturedModelProgram);   
 }
 
 void CreateProgram(GLuint& programID, const char* vertex, const char* fragment)

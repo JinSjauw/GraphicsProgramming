@@ -173,6 +173,9 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\Fragment.shader" />
+    <None Include="shaders\modelFragment.shader" />
+    <None Include="shaders\modelUntexturedFragment.shader" />
+    <None Include="shaders\modelVertex.shader" />
     <None Include="shaders\skyboxFragment.shader" />
     <None Include="shaders\skyboxVertex.shader" />
     <None Include="shaders\terrainFragment.shader" />
