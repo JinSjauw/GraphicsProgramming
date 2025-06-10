@@ -25,6 +25,10 @@ void RenderSkyBox();
 void RenderTerrain();
 void RenderModel(Model* model, GLuint& programID, glm::vec3 pos, glm::vec3 rot, glm::vec3 scale, glm::vec4 color = glm::vec4(0, 0, 0, 0), bool untextured = false);
 
+void CreateFrameBuffer(int width, int height, unsigned int& frameBufferID, unsigned int& colorBufferID, unsigned int& depthBufferID);
+void RenderToBuffer(unsigned int frameBufferTo, unsigned int colorBufferFrom, GLuint shader);
+void RenderQuad();
+
 //Callbacks
 void Mouse_Callback(GLFWwindow* window, double xpos, double ypos);
 void Key_Callback(GLFWwindow* window, int key, int scancode, int action, int mods);
@@ -36,7 +40,7 @@ void LoadFile(const char* filename, char*& output);
 GLuint loadTexture(const char* path, int comp = 0);
 
 //Program ID's
-GLuint simpleProgram, skyBoxProgram, terrainProgram, modelProgram, untexturedModelProgram;
+GLuint simpleProgram, skyBoxProgram, terrainProgram, modelProgram, untexturedModelProgram, blitProgram;
 
 const int WIDTH = 1280, HEIGHT = 720;
 
@@ -109,6 +113,14 @@ int main()
     world = glm::scale(world, glm::vec3(1, 1, 1));
     world = glm::translate(world, glm::vec3(0, 0, 0));*/
 
+    unsigned int frameBuff1, frameBuff2;
+    unsigned int colorBuff1, colorBuff2;
+    unsigned int depthBuff1, depthBuff2;
+    
+    CreateFrameBuffer(WIDTH, HEIGHT, frameBuff1, colorBuff1, depthBuff1);
+    CreateFrameBuffer(WIDTH, HEIGHT, frameBuff2, colorBuff2, depthBuff2);
+
+
     view = glm::lookAt(cameraPosition, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
     projection = glm::perspective(glm::radians(45.0f), WIDTH / (float)HEIGHT, 0.05f, 10000.0f);
 
@@ -117,10 +129,14 @@ int main()
         //Input
         ProcessInput(window);
 
+        glBindFramebuffer(GL_FRAMEBUFFER, frameBuff1);
+        //glEnable(GL_DEPTH_TEST);
+
+        //Clear scene
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        
+        //Draw scene
         float t = glfwGetTime();
 
         RenderSkyBox();
@@ -129,6 +145,11 @@ int main()
         RenderModel(backpack, modelProgram, glm::vec3(800, 350, 1100), glm::vec3(0, t * .2, 0), glm::vec3(200, 200, 200));
         RenderModel(house, untexturedModelProgram, glm::vec3(1500, 20, 1300), glm::vec3(0, t * 5, 0), glm::vec3(5, 5, 5), glm::vec4(1, 1, 0, 1), true);
         RenderModel(ironMan, untexturedModelProgram, glm::vec3(800, -900, 1100), glm::vec3(0, t * .2, 0), glm::vec3(7, 7, 7), glm::vec4(1, 0, 0, 1), true);
+
+        glBindFramebuffer(GL_FRAMEBUFFER, 0);
+        //glDisable(GL_DEPTH_TEST);
+
+        RenderToBuffer(0, colorBuff1, blitProgram);
 
         //Swap & Poll
         glfwSwapBuffers(window);
@@ -568,8 +589,11 @@ void CreateShaders()
     glUniform1i(glGetUniformLocation(modelProgram, "texture_ao1"), 4);
 
     CreateProgram(untexturedModelProgram, "shaders/modelVertex.shader", "shaders/modelUntexturedFragment.shader");
+    glUseProgram(untexturedModelProgram);
 
-    glUseProgram(untexturedModelProgram);   
+    CreateProgram(blitProgram, "shaders/imgVertex.shader", "shaders/imgFragment.shader");
+    glUseProgram(blitProgram);
+    glUniform1i(glGetUniformLocation(blitProgram, "mainTex"), 0);
 }
 
 void CreateProgram(GLuint& programID, const char* vertex, const char* fragment)
@@ -723,6 +747,88 @@ void RenderBox(glm::mat4 &view, glm::mat4 &projection, int triangleIndexCount, g
     //glBindVertexArray(triangleEBO);
     //glDrawArrays(GL_TRIANGLES, 0, triangleSize);
     glDrawElements(GL_TRIANGLES, triangleIndexCount, GL_UNSIGNED_INT, 0);
+}
+
+void CreateFrameBuffer(int width, int height, unsigned int &frameBufferID, unsigned int &colorBufferID, unsigned int &depthBufferID)
+{
+    //Generate framebuffer
+    glGenFramebuffers(1, &frameBufferID);
+    //Generate colorbuffer
+    glGenTextures(1, &colorBufferID);
+    glBindTexture(GL_TEXTURE_2D, colorBufferID);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    //Generate depth buffer
+    glGenRenderbuffers(1, &depthBufferID);
+    glBindRenderbuffer(GL_RENDERBUFFER, depthBufferID);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+
+    //attach buffers
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBufferID);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorBufferID, 0);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthBufferID);
+
+    if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+    {
+        std::cout << "Framebuffer not complete" << std::endl;
+    }
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+void RenderToBuffer(unsigned int frameBufferTo, unsigned int colorBufferFrom, GLuint shader)
+{
+    //std::cout << "Rendering to buffer! " << "Buffer: " << frameBufferTo << std::endl;
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBufferTo);
+
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glUseProgram(shader);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, colorBufferFrom);
+
+    RenderQuad();
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
+
+
+GLuint quadVAO = 0;
+GLuint quadVBO = 0;
+
+void RenderQuad()
+{
+    if (quadVAO == 0)
+    {
+        float quadVertices[] =
+        {
+            -1.0f,  1.0f,  0.0f, 1.0f,
+            -1.0f, -1.0f,  0.0f, 0.0f,
+             1.0f, -1.0f,  1.0f, 0.0f,
+
+            -1.0f,  1.0f,  0.0f, 1.0f,
+             1.0f, -1.0f,  1.0f, 0.0f,
+             1.0f,  1.0f,  1.0f, 1.0f
+        };
+
+        glGenVertexArrays(1, &quadVAO);
+        glGenBuffers(1, &quadVBO);
+        glBindVertexArray(quadVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), &quadVertices, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), (void*)(2 * sizeof(float)));
+    }
+    glBindVertexArray(quadVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glBindVertexArray(0);
 }
 
 void Mouse_Callback(GLFWwindow* window, double xpos, double ypos)

@@ -173,6 +173,8 @@
   </ItemGroup>
   <ItemGroup>
     <None Include="shaders\Fragment.shader" />
+    <None Include="shaders\imgFragment.shader" />
+    <None Include="shaders\imgVertex.shader" />
     <None Include="shaders\modelFragment.shader" />
     <None Include="shaders\modelUntexturedFragment.shader" />
     <None Include="shaders\modelVertex.shader" />
