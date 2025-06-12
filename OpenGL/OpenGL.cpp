@@ -23,10 +23,12 @@ unsigned int GeneratePlane(const char* heightmap, unsigned char* &data, GLenum f
 void RenderBox(glm::mat4& view, glm::mat4& projection, int triangleIndexCount, glm::vec3 pos, glm::vec3 rot, glm::vec3 scale);
 void RenderSkyBox();
 void RenderTerrain();
-void RenderModel(Model* model, GLuint& programID, glm::vec3 pos, glm::vec3 rot, glm::vec3 scale, glm::vec4 color = glm::vec4(0, 0, 0, 0), bool untextured = false);
+void RenderModel(Model* model, GLuint& programID, glm::vec3 pos, glm::vec3 rot, glm::vec3 scale, glm::vec3 color = glm::vec3(0, 0, 0), bool untextured = false);
 
 void CreateFrameBuffer(int width, int height, unsigned int& frameBufferID, unsigned int& colorBufferID, unsigned int& depthBufferID);
 void RenderToBuffer(unsigned int frameBufferTo, unsigned int colorBufferFrom, GLuint shader);
+void RenderToBuffer(unsigned int frameBufferTo, unsigned int colorBufferFrom, unsigned int depthBufferFrom, GLuint shader);
+
 void RenderQuad();
 
 //Callbacks
@@ -40,7 +42,7 @@ void LoadFile(const char* filename, char*& output);
 GLuint loadTexture(const char* path, int comp = 0);
 
 //Program ID's
-GLuint simpleProgram, skyBoxProgram, terrainProgram, modelProgram, untexturedModelProgram, blitProgram;
+GLuint simpleProgram, skyBoxProgram, terrainProgram, modelProgram, untexturedModelProgram, blitProgram, terrainScanProgram;
 
 const int WIDTH = 1280, HEIGHT = 720;
 
@@ -69,6 +71,10 @@ GLuint dirt, sand, grass, rock, snow;
 Model* backpack;
 Model* house;
 Model* ironMan;
+
+unsigned int frameBuff1, frameBuff2;
+unsigned int colorBuff1, colorBuff2;
+unsigned int depthBuff1, depthBuff2;
 
 int main()
 {
@@ -112,10 +118,6 @@ int main()
     world = glm::rotate(world, glm::radians(45.0f), glm::vec3(0, 1, 0));
     world = glm::scale(world, glm::vec3(1, 1, 1));
     world = glm::translate(world, glm::vec3(0, 0, 0));*/
-
-    unsigned int frameBuff1, frameBuff2;
-    unsigned int colorBuff1, colorBuff2;
-    unsigned int depthBuff1, depthBuff2;
     
     CreateFrameBuffer(WIDTH, HEIGHT, frameBuff1, colorBuff1, depthBuff1);
     CreateFrameBuffer(WIDTH, HEIGHT, frameBuff2, colorBuff2, depthBuff2);
@@ -129,8 +131,9 @@ int main()
         //Input
         ProcessInput(window);
 
-        glBindFramebuffer(GL_FRAMEBUFFER, frameBuff1);
-        //glEnable(GL_DEPTH_TEST);
+        glBindFramebuffer(GL_FRAMEBUFFER, frameBuff1); 
+        glEnable(GL_DEPTH_TEST);
+        glEnable(GL_DEPTH);
 
         //Clear scene
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -142,14 +145,16 @@ int main()
         RenderSkyBox();
         RenderTerrain();
         RenderBox(view, projection, boxIndexCount, glm::vec3(100, 350, 300), glm::vec3(t * 0.2, t * .4, t * -0.2), glm::vec3(200, 200, 200));
-        RenderModel(backpack, modelProgram, glm::vec3(800, 350, 1100), glm::vec3(0, t * .2, 0), glm::vec3(200, 200, 200));
-        RenderModel(house, untexturedModelProgram, glm::vec3(1500, 20, 1300), glm::vec3(0, t * 5, 0), glm::vec3(5, 5, 5), glm::vec4(1, 1, 0, 1), true);
-        RenderModel(ironMan, untexturedModelProgram, glm::vec3(800, -900, 1100), glm::vec3(0, t * .2, 0), glm::vec3(7, 7, 7), glm::vec4(1, 0, 0, 1), true);
+        RenderBox(view, projection, boxIndexCount, glm::vec3(1500, 150, 1300), glm::vec3(1, 1, 1), glm::vec3(10, 10, 10));
+        RenderModel(backpack, modelProgram, glm::vec3(800, 250, 1100), glm::vec3(0, t * .2, 0), glm::vec3(50, 50, 50));
+        //RenderModel(house, untexturedModelProgram, glm::vec3(1500, 20, 1300), glm::vec3(0, t * 5, 0), glm::vec3(5, 5, 5), glm::vec4(1, 1, 0, 1), true);
+        RenderModel(ironMan, untexturedModelProgram, glm::vec3(800, -300, 1100), glm::vec3(0, t * .2, 0), glm::vec3(3, 3, 3), glm::vec3(.5, .1, .1), true);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         //glDisable(GL_DEPTH_TEST);
+        //glUseProgram(terrainScanProgram);
 
-        RenderToBuffer(0, colorBuff1, blitProgram);
+        RenderToBuffer(0, colorBuff1, depthBuff1, terrainScanProgram);
 
         //Swap & Poll
         glfwSwapBuffers(window);
@@ -239,7 +244,7 @@ void RenderTerrain()
     glDrawElements(GL_TRIANGLES, terrainIndexCount, GL_UNSIGNED_INT, 0);
 }
 
-void RenderModel(Model* model, GLuint& programID, glm::vec3 pos, glm::vec3 rot, glm::vec3 scale, glm::vec4 color, bool untextured)
+void RenderModel(Model* model, GLuint& programID, glm::vec3 pos, glm::vec3 rot, glm::vec3 scale, glm::vec3 color, bool untextured)
 {
     //glEnable(GL_BLEND);
     
@@ -273,7 +278,8 @@ void RenderModel(Model* model, GLuint& programID, glm::vec3 pos, glm::vec3 rot, 
 
     if(untextured)
     {
-        glUniform4fv(glGetUniformLocation(programID, "defaultColor"), 1, glm::value_ptr(color));
+        glm::vec4 objectColor = glm::vec4(color, 1);
+        glUniform4fv(glGetUniformLocation(programID, "defaultColor"), 1, glm::value_ptr(objectColor));
     }
     glUniform3fv(glGetUniformLocation(programID, "lightDirection"), 1, glm::value_ptr(lightDirection));
     glUniform3fv(glGetUniformLocation(programID, "cameraPosition"), 1, glm::value_ptr(cameraPosition));
@@ -594,6 +600,12 @@ void CreateShaders()
     CreateProgram(blitProgram, "shaders/imgVertex.shader", "shaders/imgFragment.shader");
     glUseProgram(blitProgram);
     glUniform1i(glGetUniformLocation(blitProgram, "mainTex"), 0);
+
+    CreateProgram(terrainScanProgram, "shaders/terrainScanVertex.shader", "shaders/terrainScanFragment.shader");
+    glUseProgram(terrainScanProgram);
+    glUniform1i(glGetUniformLocation(terrainScanProgram, "screenTexture"), 0);
+    glUniform1i(glGetUniformLocation(terrainScanProgram, "depthTexture"), 1);
+
 }
 
 void CreateProgram(GLuint& programID, const char* vertex, const char* fragment)
@@ -763,15 +775,24 @@ void CreateFrameBuffer(int width, int height, unsigned int &frameBufferID, unsig
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     //Generate depth buffer
-    glGenRenderbuffers(1, &depthBufferID);
+    /*glGenRenderbuffers(1, &depthBufferID);
     glBindRenderbuffer(GL_RENDERBUFFER, depthBufferID);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
-    glBindRenderbuffer(GL_RENDERBUFFER, 0);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT, width, height);
+    glBindRenderbuffer(GL_RENDERBUFFER, 0);*/
+
+    glGenTextures(1, &depthBufferID);
+    glBindTexture(GL_TEXTURE_2D, depthBufferID);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, width, height, 0, GL_DEPTH_COMPONENT, GL_FLOAT, NULL);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
     //attach buffers
     glBindFramebuffer(GL_FRAMEBUFFER, frameBufferID);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, colorBufferID, 0);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthBufferID);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D, depthBufferID, 0);
+    //glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, depthBufferID);
 
     if(glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
     {
@@ -797,6 +818,24 @@ void RenderToBuffer(unsigned int frameBufferTo, unsigned int colorBufferFrom, GL
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
+void RenderToBuffer(unsigned int frameBufferTo, unsigned int colorBufferFrom, unsigned int depthBufferFrom, GLuint shader)
+{
+    //std::cout << "Rendering to buffer! " << "Buffer: " << frameBufferTo << std::endl;
+    glBindFramebuffer(GL_FRAMEBUFFER, frameBufferTo);
+
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glUseProgram(shader);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, colorBufferFrom);
+
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, depthBufferFrom);
+
+    RenderQuad();
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+}
 
 GLuint quadVAO = 0;
 GLuint quadVBO = 0;

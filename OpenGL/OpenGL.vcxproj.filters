@@ -65,6 +65,12 @@
     <None Include="shaders\imgVertex.shader">
       <Filter>Resource Files\Shaders</Filter>
     </None>
+    <None Include="shaders\terrainScanVertex.shader">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
+    <None Include="shaders\terrainScanFragment.shader">
+      <Filter>Resource Files\Shaders</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Image Include="textures\container2.png">

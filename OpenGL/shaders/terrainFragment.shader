@@ -70,7 +70,7 @@ void main()
 
     vec3 diffuse = lerp(lerp(lerp(lerp(dirtColor, sandColor, dirtToSand), grassColor, sandToGrass), rockColor, grassToRock), snowColor, rockToSnow);
 
-    float fog = pow(clamp((distance - 250) / 1000, 0, 1), 2);
+    float fog = pow(clamp((distance - 900) / 1000, 0, 1), 2);
 
     vec3 topColor = vec3(68.0f / 255.0f, 118.0f / 255.0f, 189.0f / 255.0f);
     vec3 bottomColor = vec3(188.0f / 255.0f, 214.0f / 255.0f, 231.0f / 255.0f);

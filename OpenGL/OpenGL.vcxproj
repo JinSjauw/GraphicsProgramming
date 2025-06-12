@@ -181,6 +181,8 @@
     <None Include="shaders\skyboxFragment.shader" />
     <None Include="shaders\skyboxVertex.shader" />
     <None Include="shaders\terrainFragment.shader" />
+    <None Include="shaders\terrainScanFragment.shader" />
+    <None Include="shaders\terrainScanVertex.shader" />
     <None Include="shaders\terrainVertex.shader" />
     <None Include="shaders\Vertex.shader" />
   </ItemGroup>
