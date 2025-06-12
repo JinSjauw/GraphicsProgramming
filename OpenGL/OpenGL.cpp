@@ -27,7 +27,7 @@ void RenderModel(Model* model, GLuint& programID, glm::vec3 pos, glm::vec3 rot, 
 
 void CreateFrameBuffer(int width, int height, unsigned int& frameBufferID, unsigned int& colorBufferID, unsigned int& depthBufferID);
 void RenderToBuffer(unsigned int frameBufferTo, unsigned int colorBufferFrom, GLuint shader);
-void RenderToBuffer(unsigned int frameBufferTo, unsigned int colorBufferFrom, unsigned int depthBufferFrom, GLuint shader);
+void RenderTerrainScanner(unsigned int frameBufferTo, unsigned int colorBufferFrom, unsigned int depthBufferFrom, GLuint shader);
 
 void RenderQuad();
 
@@ -154,7 +154,7 @@ int main()
         //glDisable(GL_DEPTH_TEST);
         //glUseProgram(terrainScanProgram);
 
-        RenderToBuffer(0, colorBuff1, depthBuff1, terrainScanProgram);
+        RenderTerrainScanner(0, colorBuff1, depthBuff1, terrainScanProgram);
 
         //Swap & Poll
         glfwSwapBuffers(window);
@@ -818,9 +818,28 @@ void RenderToBuffer(unsigned int frameBufferTo, unsigned int colorBufferFrom, GL
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-void RenderToBuffer(unsigned int frameBufferTo, unsigned int colorBufferFrom, unsigned int depthBufferFrom, GLuint shader)
+//void RenderToBuffer(unsigned int frameBufferTo, unsigned int colorBufferFrom, unsigned int depthBufferFrom, GLuint shader)
+//{
+//    //std::cout << "Rendering to buffer! " << "Buffer: " << frameBufferTo << std::endl;
+//    glBindFramebuffer(GL_FRAMEBUFFER, frameBufferTo);
+//
+//    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+//    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+//    glUseProgram(shader);
+//    glActiveTexture(GL_TEXTURE0);
+//    glBindTexture(GL_TEXTURE_2D, colorBufferFrom);
+//
+//    glActiveTexture(GL_TEXTURE1);
+//    glBindTexture(GL_TEXTURE_2D, depthBufferFrom);
+//
+//    RenderQuad();
+//
+//    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+//}
+
+void RenderTerrainScanner(unsigned int frameBufferTo, unsigned int colorBufferFrom, unsigned int depthBufferFrom, GLuint shader)
 {
-    //std::cout << "Rendering to buffer! " << "Buffer: " << frameBufferTo << std::endl;
+    
     glBindFramebuffer(GL_FRAMEBUFFER, frameBufferTo);
 
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
@@ -832,9 +851,16 @@ void RenderToBuffer(unsigned int frameBufferTo, unsigned int colorBufferFrom, un
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, depthBufferFrom);
 
+    glm::mat4 inverseView = glm::inverse(view);
+    glm::mat4 inverseProjection = glm::inverse(projection);
+
+    glUniformMatrix4fv(glGetUniformLocation(terrainScanProgram, "inverseView"), 1, GL_FALSE, glm::value_ptr(inverseView));
+    glUniformMatrix4fv(glGetUniformLocation(terrainScanProgram, "inverseProjection"), 1, GL_FALSE, glm::value_ptr(inverseProjection));
+
     RenderQuad();
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
 }
 
 GLuint quadVAO = 0;
