@@ -40,6 +40,9 @@ bool keys[2048];
 //Utils
 void LoadFile(const char* filename, char*& output);
 GLuint loadTexture(const char* path, int comp = 0);
+float EaseInOut(float value);
+float PowEaseInOut(float value, float power);
+float ExpEaseInOut(float value, float exp, float midpoint);
 
 //Program ID's
 GLuint simpleProgram, skyBoxProgram, terrainProgram, modelProgram, untexturedModelProgram, blitProgram, terrainScanProgram;
@@ -76,6 +79,27 @@ unsigned int frameBuff1, frameBuff2;
 unsigned int colorBuff1, colorBuff2;
 unsigned int depthBuff1, depthBuff2;
 
+//Terrain Scan variables
+
+bool playTerrainScanEffect = false;
+
+float maxAreaRadius = 1850;
+
+float effectVisibility;
+float areaRadius;
+
+float fadeTimer;
+float effectTimer;
+float effectSpreadDuration = 4.5;
+float effectFadeDuration = 2.5;
+
+//Timer variables
+
+float currentFrameTime;
+float lastFrameTime;
+float deltaTime;
+
+
 int main()
 {
     GLFWwindow* window;
@@ -88,7 +112,7 @@ int main()
     CreateGeometry(boxVAO, boxEBO, boxSize, boxIndexCount);
     
     //Terrain
-    terrainVAO = GeneratePlane("textures/heightmap3.png", heightmapData, GL_RGBA, 4, 250.0f, 5.0f, terrainIndexCount, heightMapID);
+    terrainVAO = GeneratePlane("textures/heightmap3.png", heightmapData, GL_RGBA, 4, 300.0f, 5.0f, terrainIndexCount, heightMapID);
     heightMapNormalID = loadTexture("textures/heightmapNormal3.png");
 
     dirt = loadTexture("textures/dirt.jpg", 4);
@@ -140,21 +164,73 @@ int main()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
         //Draw scene
-        float t = glfwGetTime();
+
+        lastFrameTime = currentFrameTime;
+        currentFrameTime = glfwGetTime();
+        deltaTime = currentFrameTime - lastFrameTime;
+
+        //std::cout << deltaTime << std::endl;
 
         RenderSkyBox();
         RenderTerrain();
-        RenderBox(view, projection, boxIndexCount, glm::vec3(100, 350, 300), glm::vec3(t * 0.2, t * .4, t * -0.2), glm::vec3(200, 200, 200));
+        RenderBox(view, projection, boxIndexCount, glm::vec3(100, 350, 300), glm::vec3(currentFrameTime * 0.2, currentFrameTime * .4, currentFrameTime * -0.2), glm::vec3(200, 200, 200));
         RenderBox(view, projection, boxIndexCount, glm::vec3(1500, 150, 1300), glm::vec3(1, 1, 1), glm::vec3(10, 10, 10));
-        RenderModel(backpack, modelProgram, glm::vec3(800, 250, 1100), glm::vec3(0, t * .2, 0), glm::vec3(50, 50, 50));
+        RenderModel(backpack, modelProgram, glm::vec3(800, 250, 1100), glm::vec3(0, currentFrameTime * .2, 0), glm::vec3(50, 50, 50));
         //RenderModel(house, untexturedModelProgram, glm::vec3(1500, 20, 1300), glm::vec3(0, t * 5, 0), glm::vec3(5, 5, 5), glm::vec4(1, 1, 0, 1), true);
-        RenderModel(ironMan, untexturedModelProgram, glm::vec3(800, -300, 1100), glm::vec3(0, t * .2, 0), glm::vec3(3, 3, 3), glm::vec3(.5, .1, .1), true);
+        RenderModel(ironMan, untexturedModelProgram, glm::vec3(800, -300, 1100), glm::vec3(0, currentFrameTime * .2, 0), glm::vec3(3, 3, 3), glm::vec3(.5, .1, .1), true);
 
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         //glDisable(GL_DEPTH_TEST);
         //glUseProgram(terrainScanProgram);
 
         RenderTerrainScanner(0, colorBuff1, depthBuff1, terrainScanProgram);
+
+        //Play terrain scan effect;
+        
+        if(playTerrainScanEffect)
+        {
+            effectTimer += deltaTime;
+            if(effectTimer < effectSpreadDuration + effectFadeDuration)
+            {
+                float normalizedSpreadTime = (effectTimer - 0) / (effectSpreadDuration - 0);
+                float easedTime = ExpEaseInOut(normalizedSpreadTime, 32, .14);
+
+
+                if(effectTimer < effectSpreadDuration)
+                {
+                    areaRadius = glm::mix(0.0f, maxAreaRadius, easedTime);
+                }
+
+                float startThreshHold = 0.075;
+
+                if(easedTime < startThreshHold)
+                {
+                    effectVisibility = glm::mix(0.8, 0.0, easedTime / startThreshHold);
+                }
+                else if(easedTime < 0.999999)
+                {
+                    effectVisibility = 0.0;
+                }
+
+                //Fade out
+                if(effectTimer > effectSpreadDuration)
+                {
+                    fadeTimer += deltaTime;
+                    float normalizedFadeTime = (fadeTimer - 0) / (effectFadeDuration - 0);
+                    float easedFadeTime = ExpEaseInOut(normalizedFadeTime, 12, 0.7);
+
+                    effectVisibility = glm::mix(0.0, 1.0, easedFadeTime);
+                }
+            }
+            else
+            {
+                playTerrainScanEffect = false;
+                areaRadius = 0;
+                effectVisibility = 1;
+                effectTimer = 0;
+                fadeTimer = 0;
+            }
+        }
 
         //Swap & Poll
         glfwSwapBuffers(window);
@@ -163,6 +239,29 @@ int main()
 
     glfwTerminate();
     return 0;
+}
+
+float EaseInOut(float value) 
+{
+    return value * value * (3.0 - 2.0 * value);
+}
+
+float PowEaseInOut(float value, float power)
+{
+    float result = glm::pow(value, power);
+    float invResult = glm::pow(1.0 - value, power);
+    return result / (result + invResult);
+
+    //return glm::pow(value, power) / (glm::pow(value, power) + glm::pow(1.0 - value, power));
+}
+
+float ExpEaseInOut(float value, float exp, float midpoint)
+{
+    float slowFactor = glm::pow(value, 3);
+    value = glm::pow(value, 4.5);
+    float sigmoid = 1.0 / (1.0 + glm::exp(-exp * (value - midpoint)));
+
+    return glm::mix(sigmoid, (float)(1.0 - glm::pow(1.0 - value, 8.0)), slowFactor);
 }
 
 void RenderSkyBox()
@@ -424,6 +523,13 @@ void ProcessInput(GLFWwindow* window)
     {
         cameraPosition += camQuat * glm::vec3(-1, 0, 0) * 0.2f;
         camChanged = true;
+    }
+    if(keys[GLFW_KEY_SPACE])
+    {
+        if(!playTerrainScanEffect)
+        {
+            playTerrainScanEffect = true;
+        }
     }
 
     if(camChanged)
@@ -818,25 +924,6 @@ void RenderToBuffer(unsigned int frameBufferTo, unsigned int colorBufferFrom, GL
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
-//void RenderToBuffer(unsigned int frameBufferTo, unsigned int colorBufferFrom, unsigned int depthBufferFrom, GLuint shader)
-//{
-//    //std::cout << "Rendering to buffer! " << "Buffer: " << frameBufferTo << std::endl;
-//    glBindFramebuffer(GL_FRAMEBUFFER, frameBufferTo);
-//
-//    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
-//    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-//    glUseProgram(shader);
-//    glActiveTexture(GL_TEXTURE0);
-//    glBindTexture(GL_TEXTURE_2D, colorBufferFrom);
-//
-//    glActiveTexture(GL_TEXTURE1);
-//    glBindTexture(GL_TEXTURE_2D, depthBufferFrom);
-//
-//    RenderQuad();
-//
-//    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-//}
-
 void RenderTerrainScanner(unsigned int frameBufferTo, unsigned int colorBufferFrom, unsigned int depthBufferFrom, GLuint shader)
 {
     
@@ -858,11 +945,12 @@ void RenderTerrainScanner(unsigned int frameBufferTo, unsigned int colorBufferFr
     glUniformMatrix4fv(glGetUniformLocation(terrainScanProgram, "inverseView"), 1, GL_FALSE, glm::value_ptr(inverseView));
     glUniformMatrix4fv(glGetUniformLocation(terrainScanProgram, "inverseProjection"), 1, GL_FALSE, glm::value_ptr(inverseProjection));
     glUniform2fv(glGetUniformLocation(terrainScanProgram, "screenResolution"), 1, glm::value_ptr(screenResolution));
+    glUniform1f(glGetUniformLocation(terrainScanProgram, "effectVisibility"), effectVisibility);
+    glUniform1f(glGetUniformLocation(terrainScanProgram, "areaRadius"), areaRadius);
 
     RenderQuad();
 
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
 }
 
 GLuint quadVAO = 0;

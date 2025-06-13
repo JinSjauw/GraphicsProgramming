@@ -8,23 +8,23 @@ uniform sampler2D depthTexture;
 uniform mat4 inverseView;
 uniform mat4 inverseProjection;
 uniform vec2 screenResolution;
-uniform float effectAlpha = 0;
+uniform float effectVisibility = 0;
 uniform float areaRadius = 100;
 
 float near = 0.1; 
 float far = 100.0; 
 
 //Sobel outline
-float outlineThickness = 1;
+float outlineThickness = 4;
 float outlineDepthMultiplier = 1;
 float outlineDepthBias = 10;;
 
-vec4 outlineColor = vec4(0, 1, 0, 1);
+vec4 outlineColor = vec4(0, 0.8, 1, 1);
 
 //Scanner 
 //float areaRadius = 1500;
 
-float distanceBetweenLines = 50;
+float distanceBetweenLines = 32;
 float scanLineThickness = 2;
 vec3 scanLineColor = vec3(0, 0.8, 1);
 
@@ -195,5 +195,5 @@ void main()
 
     vec3 result = lerp(originalColor, firstScanLineColor, areaMask);
 
-    FragColor = vec4(lerp(result, originalColor, effectAlpha), 1);
+    FragColor = vec4(lerp(result, originalColor, effectVisibility), 1);
 }
