@@ -853,9 +853,11 @@ void RenderTerrainScanner(unsigned int frameBufferTo, unsigned int colorBufferFr
 
     glm::mat4 inverseView = glm::inverse(view);
     glm::mat4 inverseProjection = glm::inverse(projection);
+    glm::vec2 screenResolution = glm::vec2(WIDTH, HEIGHT);
 
     glUniformMatrix4fv(glGetUniformLocation(terrainScanProgram, "inverseView"), 1, GL_FALSE, glm::value_ptr(inverseView));
     glUniformMatrix4fv(glGetUniformLocation(terrainScanProgram, "inverseProjection"), 1, GL_FALSE, glm::value_ptr(inverseProjection));
+    glUniform2fv(glGetUniformLocation(terrainScanProgram, "screenResolution"), 1, glm::value_ptr(screenResolution));
 
     RenderQuad();
 
