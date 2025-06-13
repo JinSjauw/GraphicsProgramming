@@ -8,12 +8,11 @@ uniform sampler2D depthTexture;
 uniform mat4 inverseView;
 uniform mat4 inverseProjection;
 uniform vec2 screenResolution;
+uniform float effectAlpha = 0;
+uniform float areaRadius = 100;
 
 float near = 0.1; 
 float far = 100.0; 
-float distanceBetweenLines = 50;
-float scanLineThickness = 1;
-vec3 scanLineColor = vec3(0.9, .9, 1.2);
 
 //Sobel outline
 float outlineThickness = 1;
@@ -22,11 +21,24 @@ float outlineDepthBias = 10;;
 
 vec4 outlineColor = vec4(0, 1, 0, 1);
 
-//Scanner shape
-float areaRadius = 600;
+//Scanner 
+//float areaRadius = 1500;
+
+float distanceBetweenLines = 50;
+float scanLineThickness = 2;
+vec3 scanLineColor = vec3(0, 0.8, 1);
+
+//Edge Effects
 vec3 edgeColor = vec3(.1, .5, 1);
-float edgeGradientFallOff = .6;
-float edgeGradientSize = .15;
+float edgeGradientFallOff = .5;
+float edgeGradientSize = .12;
+
+vec3 edgeDarkeningColor = vec3(0, 0, 0);
+float edgeDarkeningFallOff = 1;
+float edgeDarkeningSize = .4;
+
+vec3 firstLineColor = vec3(1, 1, 1);
+
 
 vec3 originTerrainScan = vec3(1500, 150, 1300);
 
@@ -165,9 +177,9 @@ void main()
     float edgeWidth = areaRadius * edgeGradientSize;
     float edgeGradientMask = 1.0 - pow(clamp((areaRadius - distanceFromOrigin) / edgeWidth, 0.0, 1.0), edgeGradientFallOff);
 
-    float darkeningEdgeWidth = areaRadius * .4;
-    float darkeningEdgeMask = 1.0 - pow(clamp((areaRadius - distanceFromOrigin) / darkeningEdgeWidth, 0.0, 1.0), 4.5);
-    vec3 darkenedColor = Blend_Darken(originalColor, vec3(0, 0, 0), 1);
+    float darkeningEdgeWidth = areaRadius * edgeDarkeningSize;
+    float darkeningEdgeMask = 1.0 - pow(clamp((areaRadius - distanceFromOrigin) / darkeningEdgeWidth, 0.0, 1.0), edgeDarkeningFallOff);
+    vec3 darkenedColor = Blend_Darken(originalColor, edgeDarkeningColor, 1);
 
     //Add edge gradient & darkening effect
     vec3 darkeningEffect = lerp(originalColor, darkenedColor, darkeningEdgeMask);
@@ -175,9 +187,13 @@ void main()
 
     //Add scanlines
     vec3 scanLinesColor = lerp(edgeGradient, scanLineColor, depthLinesMask);
-    vec3 scanLinesResult = lerp(scanLinesColor, outlineColor.rgb, sobelDepth * depthLinesMask);
+    vec3 scanLinesResult = lerp(scanLinesColor, outlineColor.rgb, sobelDepth);
+    
+    //Color first line closest to the edge differently
+    float firstLineMask = step((ceil(areaRadius / distanceBetweenLines) - 1) * distanceBetweenLines, distanceFromOrigin);
+    vec3 firstScanLineColor = lerp(scanLinesResult, firstLineColor, firstLineMask * depthLinesMask);
 
-    vec3 result = lerp(originalColor, scanLinesResult, areaMask);
+    vec3 result = lerp(originalColor, firstScanLineColor, areaMask);
 
-    FragColor = vec4(result, 1.0);
+    FragColor = vec4(lerp(result, originalColor, effectAlpha), 1);
 }
