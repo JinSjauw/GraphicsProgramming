@@ -10,35 +10,35 @@ uniform mat4 inverseProjection;
 uniform vec2 screenResolution;
 uniform float effectVisibility = 0;
 uniform float areaRadius = 100;
+uniform float firstLineRadius = 100;
 
 float near = 0.1; 
 float far = 100.0; 
 
 //Sobel outline
-float outlineThickness = 4;
+float outlineThickness = 2;
 float outlineDepthMultiplier = 1;
-float outlineDepthBias = 10;;
+float outlineDepthBias = 1;;
 
 vec4 outlineColor = vec4(0, 0.8, 1, 1);
 
 //Scanner 
-//float areaRadius = 1500;
 
-float distanceBetweenLines = 32;
-float scanLineThickness = 2;
-vec3 scanLineColor = vec3(0, 0.8, 1);
+float distanceBetweenLines = 15;
+float scanLineThickness = 1.5;
+vec3 scanLineColor = vec3(0, 0.6, 1);
 
 //Edge Effects
 vec3 edgeColor = vec3(.1, .5, 1);
 float edgeGradientFallOff = .5;
-float edgeGradientSize = .12;
+float edgeGradientSize = .16;
 
 vec3 edgeDarkeningColor = vec3(0, 0, 0);
 float edgeDarkeningFallOff = 1;
 float edgeDarkeningSize = .4;
 
 vec3 firstLineColor = vec3(1, 1, 1);
-
+vec3 secondLineColor = vec3(0, 0.9, 1);
 
 vec3 originTerrainScan = vec3(1500, 150, 1300);
 
@@ -84,18 +84,6 @@ float SobelSampleDepth(vec2 uv, vec2 pixelOffset, float depth)
     vec2 horizontalOffset = vec2(pixelOffset.x, 0);
     vec2 verticalOffset = vec2(0, pixelOffset.y);
 
-    // float pixelCenter = distance(CalculateWorldSpacePosition(uv, depth).xyz,                    originTerrainScan);
-    // float pixelLeft = distance(CalculateWorldSpacePosition(uv - horizontalOffset, depth).xyz, originTerrainScan);
-    // float pixelRight = distance(CalculateWorldSpacePosition(uv + horizontalOffset, depth).xyz, originTerrainScan);
-    // float pixelUp = distance(CalculateWorldSpacePosition(uv + verticalOffset, depth).xyz,   originTerrainScan);
-    // float pixelDown = distance(CalculateWorldSpacePosition(uv - verticalOffset, depth).xyz,   originTerrainScan);
-
-    // pixelCenter = clamp((pixelCenter - minDistance) / maxDistance, 0, 1);
-    // pixelLeft = clamp((pixelLeft - minDistance) / maxDistance, 0, 1);
-    // pixelRight = clamp((pixelRight - minDistance) / maxDistance, 0, 1);
-    // pixelUp = clamp((pixelUp - minDistance) / maxDistance, 0, 1);
-    // pixelDown = clamp((pixelDown - minDistance) / maxDistance, 0, 1);
-
     //Sobel outline whole effect
     float pixelCenter = LinearizeDepth(texture(depthTexture, TexCoords).r);
     float pixelLeft = LinearizeDepth(texture(depthTexture, TexCoords - horizontalOffset).r);
@@ -107,24 +95,6 @@ float SobelSampleDepth(vec2 uv, vec2 pixelOffset, float depth)
            abs(pixelRight - pixelCenter) +
            abs(pixelUp - pixelCenter) +
            abs(pixelDown - pixelCenter);
-
-    //Sobel outline scanline MASK
-    // //Distances of each pixel to the origin of the terrain scan effect.
-    // float centerDistanceToOrigin = distance(CalculateWorldSpacePosition(uv, depth).xyz,                    originTerrainScan);
-    // float leftDistanceToOrigin   = distance(CalculateWorldSpacePosition(uv - horizontalOffset, depth).xyz, originTerrainScan);
-    // float rightDistanceToOrigin  = distance(CalculateWorldSpacePosition(uv + horizontalOffset, depth).xyz, originTerrainScan);
-    // float upDistanceToOrigin     = distance(CalculateWorldSpacePosition(uv + verticalOffset, depth).xyz,   originTerrainScan);
-    // float downDistanceToOrigin   = distance(CalculateWorldSpacePosition(uv - verticalOffset, depth).xyz,   originTerrainScan);
-
-
-    // //Comparing intervals to get the "lines" effect.
-    // float center = floor(centerDistanceToOrigin / distanceBetweenLines);
-    // float left = floor(leftDistanceToOrigin / distanceBetweenLines);
-    // float right = floor(rightDistanceToOrigin / distanceBetweenLines);
-    // float up = floor(upDistanceToOrigin / distanceBetweenLines);
-    // float down = floor(downDistanceToOrigin / distanceBetweenLines);
-
-    // return (center - left) + (center - right) + (center - up) + (center - down);
 }
 
 void main()
@@ -141,34 +111,21 @@ void main()
         return;
     }
 
-    // //Calculating view space position
-    // vec4 remappedScreenPosition = vec4(TexCoords * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
-    // vec4 viewSpacePosition = inverseProjection * remappedScreenPosition;
-    // viewSpacePosition /= viewSpacePosition.w;
-
-    // //World space position
-    // vec4 worldSpacePosition = inverseView * viewSpacePosition;
-
+    // //Calculating World Space
     vec4 worldSpacePosition = CalculateWorldSpacePosition(TexCoords, depth);
 
-    //Creating the scan Lines
+    //Creating the scan line mask
     float distanceFromOrigin = distance(originTerrainScan, worldSpacePosition.xyz);
     float depthCategories = fract(distanceFromOrigin / distanceBetweenLines);
 
     //Create Line interval mask
     float depthLinesMask = 1.0 - step((scanLineThickness / distanceBetweenLines), depthCategories);
 
-    //apply to scene color
-    //vec3 scanLinesColor = lerp(originalColor, scanLineColor, depthLinesMask);
-
-    //Get Sobel Outline
+    //Get Sobel Outline sum
     vec2 pixelOffset = vec2(1.0 / screenResolution.x, 1.0 / screenResolution.y) * outlineThickness;
     float sobelDepth = SobelSampleDepth(TexCoords, pixelOffset, depth) / outlineThickness;
     
     sobelDepth = pow(abs(clamp(sobelDepth, 0, 1) * outlineDepthMultiplier), outlineDepthBias);
-    
-    //Add sobel outline effect to line interval mask
-    //vec3 scanLinesResult = lerp(scanLinesColor, outlineColor.rgb, sobelDepth * depthLinesMask);
 
     //Create circular area mask
     float areaMask = 1.0 - step(areaRadius, distanceFromOrigin);
@@ -177,6 +134,7 @@ void main()
     float edgeWidth = areaRadius * edgeGradientSize;
     float edgeGradientMask = 1.0 - pow(clamp((areaRadius - distanceFromOrigin) / edgeWidth, 0.0, 1.0), edgeGradientFallOff);
 
+    //Create darkening effect for under the edge gradient
     float darkeningEdgeWidth = areaRadius * edgeDarkeningSize;
     float darkeningEdgeMask = 1.0 - pow(clamp((areaRadius - distanceFromOrigin) / darkeningEdgeWidth, 0.0, 1.0), edgeDarkeningFallOff);
     vec3 darkenedColor = Blend_Darken(originalColor, edgeDarkeningColor, 1);
@@ -189,11 +147,28 @@ void main()
     vec3 scanLinesColor = lerp(edgeGradient, scanLineColor, depthLinesMask);
     vec3 scanLinesResult = lerp(scanLinesColor, outlineColor.rgb, sobelDepth);
     
-    //Color first line closest to the edge differently
-    float firstLineMask = step((ceil(areaRadius / distanceBetweenLines) - 1) * distanceBetweenLines, distanceFromOrigin);
-    vec3 firstScanLineColor = lerp(scanLinesResult, firstLineColor, firstLineMask * depthLinesMask);
+    vec3 firstColor = secondLineColor;
+    vec3 secondColor = firstLineColor;
 
-    vec3 result = lerp(originalColor, firstScanLineColor, areaMask);
+    // if(firstLineRadius == areaRadius)
+    // {
+    //     firstColor = secondLineColor;
+    //     secondColor = firstLineColor;
+    // }
+
+    //Color first line closest to the edge differently
+    float firstLineMask = step((ceil(firstLineRadius / distanceBetweenLines) - 2) * distanceBetweenLines, distanceFromOrigin);
+    vec3 firstScanLineColor = lerp(scanLinesResult, firstColor, firstLineMask * depthLinesMask);
+
+    //Color the line behind differently
+    float secondLineMask = step((ceil(firstLineRadius / distanceBetweenLines - 1)) * distanceBetweenLines, distanceFromOrigin);
+    vec3 secondScanLineColor = lerp(firstScanLineColor, secondColor, secondLineMask * depthLinesMask);
+
+    //Make sure to apply the normal scanLine color
+    float thirdLineMask = step((ceil(firstLineRadius / distanceBetweenLines)) * distanceBetweenLines, distanceFromOrigin);
+    vec3 thirdScanLineColor = lerp(secondScanLineColor, scanLineColor, thirdLineMask * depthLinesMask);
+
+    vec3 result = lerp(originalColor, thirdScanLineColor, areaMask);
 
     FragColor = vec4(lerp(result, originalColor, effectVisibility), 1);
 }
