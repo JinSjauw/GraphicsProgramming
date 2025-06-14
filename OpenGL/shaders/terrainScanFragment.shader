@@ -30,12 +30,12 @@ vec3 scanLineColor = vec3(0, 0.6, 1);
 
 //Edge Effects
 vec3 edgeColor = vec3(.1, .5, 1);
-float edgeGradientFallOff = .5;
-float edgeGradientSize = .16;
+float edgeGradientFallOff = 1;
+float edgeGradientSize = .25;
 
 vec3 edgeDarkeningColor = vec3(0, 0, 0);
-float edgeDarkeningFallOff = 1;
-float edgeDarkeningSize = .4;
+float edgeDarkeningFallOff = 3;
+float edgeDarkeningSize = .35;
 
 vec3 firstLineColor = vec3(1, 1, 1);
 vec3 secondLineColor = vec3(0, 0.9, 1);
@@ -111,6 +111,20 @@ void main()
         return;
     }
 
+    float aberrationAmount = 20;
+
+    // Chromatic aberration offsets (in normalized screen space)
+    vec2 redOffset = vec2(aberrationAmount, 0.7) / screenResolution;
+    vec2 greenOffset = vec2(0.0, aberrationAmount) / screenResolution;
+    vec2 blueOffset = vec2(-aberrationAmount, 0.7f) / screenResolution;
+
+    // Sample each color channel with offset
+    float r = texture(screenTexture, TexCoords + redOffset).r;
+    float g = texture(screenTexture, TexCoords + greenOffset).g;
+    float b = texture(screenTexture, TexCoords + blueOffset).b;
+
+    vec3 aberratedColor = vec3(r, g, b);
+
     // //Calculating World Space
     vec4 worldSpacePosition = CalculateWorldSpacePosition(TexCoords, depth);
 
@@ -138,23 +152,22 @@ void main()
     float darkeningEdgeWidth = areaRadius * edgeDarkeningSize;
     float darkeningEdgeMask = 1.0 - pow(clamp((areaRadius - distanceFromOrigin) / darkeningEdgeWidth, 0.0, 1.0), edgeDarkeningFallOff);
     vec3 darkenedColor = Blend_Darken(originalColor, edgeDarkeningColor, 1);
-
+    
     //Add edge gradient & darkening effect
     vec3 darkeningEffect = lerp(originalColor, darkenedColor, darkeningEdgeMask);
-    vec3 edgeGradient = lerp(darkeningEffect, edgeColor, edgeGradientMask);
+    vec3 aberratedEdgeGradient = lerp(darkeningEffect, edgeColor + aberratedColor, edgeGradientMask);
+
+    float borderEdgeWidth = areaRadius * .01;
+    float borderEdgeGradientMask = 1.0 - pow(clamp((areaRadius - distanceFromOrigin) / borderEdgeWidth, 0.0, 1.0), .7);
+
+    vec3 borderEdgeGradient = lerp(aberratedEdgeGradient, edgeColor, borderEdgeGradientMask);
 
     //Add scanlines
-    vec3 scanLinesColor = lerp(edgeGradient, scanLineColor, depthLinesMask);
+    vec3 scanLinesColor = lerp(borderEdgeGradient, scanLineColor, depthLinesMask);
     vec3 scanLinesResult = lerp(scanLinesColor, outlineColor.rgb, sobelDepth);
     
     vec3 firstColor = secondLineColor;
     vec3 secondColor = firstLineColor;
-
-    // if(firstLineRadius == areaRadius)
-    // {
-    //     firstColor = secondLineColor;
-    //     secondColor = firstLineColor;
-    // }
 
     //Color first line closest to the edge differently
     float firstLineMask = step((ceil(firstLineRadius / distanceBetweenLines) - 2) * distanceBetweenLines, distanceFromOrigin);
@@ -168,7 +181,12 @@ void main()
     float thirdLineMask = step((ceil(firstLineRadius / distanceBetweenLines)) * distanceBetweenLines, distanceFromOrigin);
     vec3 thirdScanLineColor = lerp(secondScanLineColor, scanLineColor, thirdLineMask * depthLinesMask);
 
-    vec3 result = lerp(originalColor, thirdScanLineColor, areaMask);
+    float whiteLineMask = step((ceil(areaRadius / distanceBetweenLines - 1)) * distanceBetweenLines, distanceFromOrigin);
+    vec3 whiteScanLineColor = lerp(thirdScanLineColor, secondColor, whiteLineMask * depthLinesMask);
+
+    vec3 result = lerp(originalColor, whiteScanLineColor, areaMask);
+
+    //result = lerp(result, aberratedColor, areaMask);
 
     FragColor = vec4(lerp(result, originalColor, effectVisibility), 1);
 }
