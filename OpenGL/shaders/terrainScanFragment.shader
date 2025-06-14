@@ -5,6 +5,10 @@ in vec2 TexCoords;
 
 uniform sampler2D screenTexture;
 uniform sampler2D depthTexture;
+
+uniform mat4 projection;
+uniform mat4 lastProjection;
+
 uniform mat4 inverseView;
 uniform mat4 inverseProjection;
 uniform vec2 screenResolution;
@@ -168,7 +172,44 @@ void main()
     float thirdLineMask = step((ceil(firstLineRadius / distanceBetweenLines)) * distanceBetweenLines, distanceFromOrigin);
     vec3 thirdScanLineColor = lerp(secondScanLineColor, scanLineColor, thirdLineMask * depthLinesMask);
 
-    vec3 result = lerp(originalColor, thirdScanLineColor, areaMask);
+    float whiteLineMask = step((ceil(areaRadius / distanceBetweenLines - 1)) * distanceBetweenLines, distanceFromOrigin);
+    vec3 whiteScanLineColor = lerp(thirdScanLineColor, secondColor, whiteLineMask * depthLinesMask);
 
-    FragColor = vec4(lerp(result, originalColor, effectVisibility), 1);
+    vec3 result = lerp(originalColor, whiteScanLineColor, areaMask);
+
+    //Motion Blur
+    vec4 previousFragPos = lastProjection * worldSpacePosition;
+    vec4 currentFragPos = projection * worldSpacePosition;
+
+    vec2 currentTexcoord = currentFragPos.xy / currentFragPos.w;
+    vec2 previousTexcoord = previousFragPos.xy / previousFragPos.w;
+
+    vec2 fragVelocity = (currentTexcoord - previousTexcoord);
+        
+    vec4 motionBlurColor = vec4(originalColor, 1);
+    vec2 texCoord = TexCoords + fragVelocity;
+
+    for(int i = 0; i < 8; i++)
+    {
+
+        float edgeFadeX = smoothstep(0.0, 0.05, texCoord.x) * (1.0 - smoothstep(0.95, 1.0, texCoord.x));
+        float edgeFadeY = smoothstep(0.0, 0.05, texCoord.y) * (1.0 - smoothstep(0.95, 1.0, texCoord.y));
+        float edgeFade = min(edgeFadeX, edgeFadeY);
+
+        vec2 adjustedVelocity = fragVelocity * edgeFade;
+
+        float t = float(i) / float(16 - 1);
+        vec2 uv = texCoord + adjustedVelocity * t;
+        uv = clamp(uv, vec2(0.0), vec2(1.0));
+        vec4 sampledColor = texture(screenTexture, uv);
+
+        motionBlurColor += sampledColor;
+    }
+
+    vec4 finalMotionBlur = motionBlurColor / 8;
+    FragColor = finalMotionBlur;
+
+    //Motion Blur end
+
+    //FragColor = vec4(lerp(result, vec3(finalMotionBlur.rgb), effectVisibility), 1);
 }

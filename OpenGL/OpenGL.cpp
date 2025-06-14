@@ -60,7 +60,7 @@ glm::vec3 lightDirection = glm::normalize(glm::vec3(-0.5f, -0.5f, -0.5f));
 glm::vec3 cameraPosition = glm::vec3(100, 125.0f, 100.0f);
 glm::quat camQuat = glm::quat(glm::vec3(glm::radians(camPitch), glm::radians(camYaw), 0));
 
-glm::mat4 view;
+glm::mat4 view, lastView;
 glm::mat4 projection;
 
 GLuint boxVAO, boxEBO, boxTex, boxNormal, boxGradientTex;
@@ -139,7 +139,6 @@ int main()
     CreateFrameBuffer(WIDTH, HEIGHT, frameBuff1, colorBuff1, depthBuff1);
     CreateFrameBuffer(WIDTH, HEIGHT, frameBuff2, colorBuff2, depthBuff2);
 
-
     view = glm::lookAt(cameraPosition, glm::vec3(0, 0, 0), glm::vec3(0, 1, 0));
     projection = glm::perspective(glm::radians(45.0f), WIDTH / (float)HEIGHT, 0.05f, 10000.0f);
 
@@ -179,6 +178,9 @@ int main()
         //Swap & Poll
         glfwSwapBuffers(window);
         glfwPollEvents();
+        lastView = view;
+
+        //lastView = view;
     }
 
     glfwTerminate();
@@ -530,6 +532,7 @@ void ProcessInput(GLFWwindow* window)
     {
         glm::vec3 camForward = camQuat * glm::vec3(0, 0, 1);
         glm::vec3 camUp = camQuat * glm::vec3(0, 1, 0);
+
         view = glm::lookAt(cameraPosition, cameraPosition + camForward, camUp);
     }
 }
@@ -936,6 +939,8 @@ void RenderTerrainScanner(unsigned int frameBufferTo, unsigned int colorBufferFr
     glm::mat4 inverseProjection = glm::inverse(projection);
     glm::vec2 screenResolution = glm::vec2(WIDTH, HEIGHT);
 
+    glUniformMatrix4fv(glGetUniformLocation(terrainScanProgram, "projection"), 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(glGetUniformLocation(terrainScanProgram, "lastProjection"), 1, GL_FALSE, glm::value_ptr(lastView));
     glUniformMatrix4fv(glGetUniformLocation(terrainScanProgram, "inverseView"), 1, GL_FALSE, glm::value_ptr(inverseView));
     glUniformMatrix4fv(glGetUniformLocation(terrainScanProgram, "inverseProjection"), 1, GL_FALSE, glm::value_ptr(inverseProjection));
     glUniform2fv(glGetUniformLocation(terrainScanProgram, "screenResolution"), 1, glm::value_ptr(screenResolution));
