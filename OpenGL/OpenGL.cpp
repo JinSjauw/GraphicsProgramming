@@ -82,8 +82,8 @@ unsigned int colorBuff1, colorBuff2;
 unsigned int depthBuff1, depthBuff2;
 
 //Terrain Scan variables
-
 bool playTerrainScanEffect = false;
+glm::vec3 terrainScanOrigin = glm::vec3(1500, 150, 1300);
 
 float maxAreaRadius = 1700;
 
@@ -91,10 +91,15 @@ float effectVisibility;
 float areaRadius;
 float firstLineRadius;
 
+float pulseTimer;
 float fadeTimer;
 float effectTimer;
 float effectSpreadDuration = 4.5;
+float effectPulseDuration = 3;
 float effectFadeDuration = 3;
+
+int pulsed = 0;
+int pulseAmount = 3;
 
 //Timer variables
 
@@ -114,6 +119,9 @@ int main()
     CreateShaders();
     CreateGeometry(boxVAO, boxEBO, boxSize, boxIndexCount);
     
+    //Lock and Hide the mouse cursor
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
     //Terrain
     terrainVAO = GeneratePlane("textures/heightmap3.png", heightmapData, GL_RGBA, 4, 300.0f, 5.0f, terrainIndexCount, heightMapID);
     heightMapNormalID = loadTexture("textures/heightmapNormal3.png");
@@ -211,38 +219,53 @@ void PlayTerrainScan()
     if (playTerrainScanEffect)
     {
         effectTimer += deltaTime;
-        if (effectTimer < effectSpreadDuration + effectFadeDuration)
+        if (effectTimer < effectSpreadDuration + (effectPulseDuration * pulseAmount) + effectFadeDuration)
         {
             float normalizedSpreadTime = (effectTimer - 0) / (effectSpreadDuration - 0);
             float easedTime = ExpEaseInOut(normalizedSpreadTime, 32, .14);
-
 
             if (effectTimer < effectSpreadDuration)
             {
                 areaRadius = glm::mix(0.0f, maxAreaRadius, easedTime);
                 firstLineRadius = areaRadius;
+
+                float startThreshHold = 0.075;
+
+                if (easedTime < startThreshHold)
+                {
+                    effectVisibility = glm::mix(0.8, 0.0, easedTime / startThreshHold);
+                }
+                else if (easedTime < 0.99)
+                {
+                    effectVisibility = 0.0;
+                }
             }
 
-            float startThreshHold = 0.075;
+            //Pulse
+            if (effectTimer > effectSpreadDuration)
+            {
+                pulseTimer += deltaTime;
+                float normalizedPulseTime = (pulseTimer - 0) / (effectPulseDuration - 0);
+                float easedPulseTime = ExpEaseInOut(normalizedPulseTime, 32, 0.14);
 
-            if (easedTime < startThreshHold)
-            {
-                effectVisibility = glm::mix(0.8, 0.0, easedTime / startThreshHold);
-            }
-            else if (easedTime < 0.999999)
-            {
-                effectVisibility = 0.0;
+                easedPulseTime = glm::clamp(easedPulseTime, 0.0f, 1.0f);
+
+                firstLineRadius = glm::mix(0.0f, maxAreaRadius, easedPulseTime);
+
+                if(normalizedPulseTime >= 1 && pulsed < pulseAmount)
+                {
+                    normalizedPulseTime = 0;
+                    pulseTimer = 0;
+                    pulsed++;
+                }
             }
 
             //Fade out
-            if (effectTimer > effectSpreadDuration)
+            if (effectTimer > effectSpreadDuration + (effectPulseDuration * pulseAmount))
             {
                 fadeTimer += deltaTime;
                 float normalizedFadeTime = (fadeTimer - 0) / (effectFadeDuration - 0);
-                float easedFadeTime = ExpEaseInOut(normalizedFadeTime, 12, 0.99);
-                //float easedPulseTime = PowEaseInOut(normalizedFadeTime);
-
-                firstLineRadius = glm::mix(0.0f, maxAreaRadius, normalizedFadeTime);
+                float easedFadeTime = ExpEaseInOut(normalizedFadeTime, 24, 0.99);
 
                 effectVisibility = glm::mix(0.0, 1.0, easedFadeTime);
             }
@@ -254,6 +277,9 @@ void PlayTerrainScan()
             effectVisibility = 1;
             effectTimer = 0;
             fadeTimer = 0;
+            pulseTimer = 0;
+            pulsed = 0;
+
         }
     }
 }
@@ -268,9 +294,6 @@ void RenderSkyBox()
     glUseProgram(skyBoxProgram);
 
     //Matrices
-
-    //Update view matrix everytime camera moves
-    //Update world matrix everytime objects are moved/changed/scaled
 
     glm::mat4 world = glm::mat4(1.0f);
     world = glm::translate(world, cameraPosition);
@@ -302,15 +325,9 @@ void RenderTerrain()
 
     glm::mat4 world = glm::mat4(1.0f);
 
-    //glUniform1i(glGetUniformLocation(terrainProgram, "mainTex"), 0);
-
     glUniformMatrix4fv(glGetUniformLocation(terrainProgram, "world"), 1, GL_FALSE, glm::value_ptr(world));
     glUniformMatrix4fv(glGetUniformLocation(terrainProgram, "view"), 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(glGetUniformLocation(terrainProgram, "projection"), 1, GL_FALSE, glm::value_ptr(projection));
-
-    //make the sun move
-    //float t = glfwGetTime();
-    //lightDirection = glm::normalize(glm::vec3(glm::sin(t), -0.5f, glm::cos(t)));
 
     glUniform3fv(glGetUniformLocation(terrainProgram, "lightDirection"), 1, glm::value_ptr(lightDirection));
     glUniform3fv(glGetUniformLocation(terrainProgram, "cameraPosition"), 1, glm::value_ptr(cameraPosition));
@@ -339,20 +356,6 @@ void RenderTerrain()
 
 void RenderModel(Model* model, GLuint& programID, glm::vec3 pos, glm::vec3 rot, glm::vec3 scale, glm::vec3 color, bool untextured)
 {
-    //glEnable(GL_BLEND);
-    
-    //blends
-    
-    //alpha
-    //glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    //additive 
-    //glBlendFunc(GL_ONE, GL_ONE);
-    //soft additive 
-    //glBlendFunc(GL_ONE_MINUS_DST_COLOR, GL_ONE);
-    //multiply
-    //glBlendFunc(GL_DST_COLOR, GL_ZERO);
-    //double multiply
-
     glEnable(GL_DEPTH);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
@@ -935,14 +938,14 @@ void RenderTerrainScanner(unsigned int frameBufferTo, unsigned int colorBufferFr
     glm::mat4 inverseView = glm::inverse(view);
     glm::mat4 inverseProjection = glm::inverse(projection);
     glm::vec2 screenResolution = glm::vec2(WIDTH, HEIGHT);
-
+ 
     glUniformMatrix4fv(glGetUniformLocation(terrainScanProgram, "inverseView"), 1, GL_FALSE, glm::value_ptr(inverseView));
     glUniformMatrix4fv(glGetUniformLocation(terrainScanProgram, "inverseProjection"), 1, GL_FALSE, glm::value_ptr(inverseProjection));
     glUniform2fv(glGetUniformLocation(terrainScanProgram, "screenResolution"), 1, glm::value_ptr(screenResolution));
+    glUniform3fv(glGetUniformLocation(terrainScanProgram, "originTerrainScan"), 1, glm::value_ptr(terrainScanOrigin));
     glUniform1f(glGetUniformLocation(terrainScanProgram, "effectVisibility"), effectVisibility);
     glUniform1f(glGetUniformLocation(terrainScanProgram, "areaRadius"), areaRadius);
     glUniform1f(glGetUniformLocation(terrainScanProgram, "firstLineRadius"), firstLineRadius);
-
 
     RenderQuad();
 

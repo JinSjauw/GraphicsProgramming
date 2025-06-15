@@ -6,8 +6,6 @@ out vec2 TexCoords;
 
 void main()
 {
-
     gl_Position = vec4(aPos.x, aPos.y, 0.0, 1.0);
-    //FragPos = (gl_Position.xy / gl_Position.w) *.5 + .5;
     TexCoords = aTexCoords;
 }
